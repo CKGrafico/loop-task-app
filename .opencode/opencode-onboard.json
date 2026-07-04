@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "generatedAt": "2026-07-04T22:59:00.232Z",
+  "onboardVersion": "1.1.0",
+  "opencodeVersion": "1.16.2",
+  "wizard": {
+    "platform": "github",
+    "backlogPlatform": "github",
+    "repoPlatform": "github",
+    "sourceMode": "current",
+    "sourceRoots": [
+      "C:\\Projects\\Personal\\loop-task-app"
+    ],
+    "maxConcurrentAgents": 3,
+    "preserved": {
+      "design": false,
+      "architecture": false,
+      "openspec": false
+    },
+    "openspec": {
+      "available": true,
+      "initialized": true
+    },
+    "additionalSkillsProvider": "npx-skills",
+    "models": {
+      "plan": "opencode-go/glm-5.2",
+      "build": "opencode-go/glm-5.1",
+      "fast": "opencode/big-pickle"
+    },
+    "optionalTools": {
+      "rtk": {
+        "optedIn": true,
+        "checked": true,
+        "available": true
+      },
+      "quota": {
+        "optedIn": true,
+        "installed": true
+      },
+      "caveman": {
+        "optedIn": true,
+        "installed": true
+      }
+    },
+    "cavemanGuidance": {
+      "enabled": true,
+      "patchedFiles": 0
+    }
+  },
+  "note": "Snapshot of onboarding choices. Runtime config — wizard.models and wizard.maxConcurrentAgents — is read by /ob-apply and the agent generator and is preserved across `opencode-onboard metadata` refreshes. Other fields are informational."
+}

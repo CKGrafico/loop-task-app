@@ -1,0 +1,40 @@
+schema: spec-driven
+
+context: |
+  Domain: Loop Task App — an Electron desktop manager for loop-task daemons
+  (register instances by HTTP API URL; monitor loops, tasks, projects, and live
+  logs). Read-only in v1.
+
+  Tech stack: TypeScript (strict), React 19, Electron 37, electron-vite 4,
+  Vite 7. Plain CSS design tokens today (src/renderer/src/theme.css); team is
+  adopting Tailwind + shadcn, Feature-Sliced Design, inversify DI, and next-intl
+  i18n. No CSS framework or state library currently.
+
+  Build system: pnpm (Node >= 20), pnpm-lock.yaml. Scripts: dev, dev:web,
+  build, start, typecheck. No CI and no test suite yet — `pnpm typecheck` is the
+  only automated gate.
+
+  Architecture: three-process Electron (main / preload / renderer). ALL network
+  I/O (HTTP + SSE) runs in the main process (loop-task sends no CORS headers and
+  the renderer is sandboxed). The renderer reaches out only through the typed
+  window.api contextBridge. The IPC contract (src/shared/ipc.ts) is the single
+  source of truth. Loops are polled (5s); logs are pushed via SSE. Local
+  persistence only: versioned localStorage (instances) + window-bounds.json.
+
+  Conventions: strict TS, no `any`, ESM only, function components + hooks,
+  PascalCase component files, versioned localStorage keys (.vN). No magic
+  strings — all user-facing copy through i18n keys (English-only for now).
+  Prefer patterns.dev catalog patterns. See .agents/skills/project-guardrails
+  for the full rule set. Platform: GitHub (gh CLI). Prefix all shell commands
+  with `rtk`.
+
+rules:
+  proposal:
+    - Every change must map to a concrete user-facing capability or an
+      architectural constraint from ARCHITECTURE.md.
+    - Respect the Electron process boundaries: network I/O belongs in main, the
+      renderer only calls window.api. Call out any new IPC channel explicitly.
+  tasks:
+    - Split work so concurrent tasks touch disjoint files (max 3 parallel).
+    - Include a verification step; at minimum `pnpm typecheck` must pass.
+    - No magic strings for user-facing text — route copy through i18n keys.
