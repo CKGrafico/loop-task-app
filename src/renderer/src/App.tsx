@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ConnectionStatus } from "../../shared/ipc";
-import type { Instance, InstanceHealth, LoopMeta, Section } from "./types";
-import { useInstances } from "./store";
-import { fetchLoops, isMock } from "./api";
+import type { ConnectionStatus, EndpointHealth } from "../../shared/ipc";
+import type { Environment, EnvironmentHealth, LoopMeta, Section } from "./types";
+import { useEnvironments } from "./store";
+import { fetchLoops, isMock, resolveBaseUrl } from "./api";
 import { Sidebar } from "./components/Sidebar";
 import { SegmentedTabs } from "./components/SegmentedTabs";
 import { AddInstanceModal } from "./components/AddInstanceModal";
@@ -21,7 +21,7 @@ const SECTION_LABELS: Record<Section, string> = {
   projects: "Projects",
 };
 
-function phaseToHealth(phase: ConnectionStatus["phase"]): InstanceHealth {
+function phaseToHealth(phase: ConnectionStatus["phase"]): EnvironmentHealth {
   switch (phase) {
     case "connected":
       return "ok";
@@ -39,49 +39,47 @@ function phaseToHealth(phase: ConnectionStatus["phase"]): InstanceHealth {
 }
 
 export function App(): React.ReactNode {
-  const { instances, selectedId, select, add, remove } = useInstances();
+  const { environments, selectedId, select, add, remove, setActiveEndpoint } = useEnvironments();
   const [section, setSection] = useState<Section>("loops");
   const [view, setView] = useState<View>({ kind: "list" });
   const [filter, setFilter] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [health, setHealth] = useState<Record<string, InstanceHealth>>({});
+  const [health, setHealth] = useState<Record<string, EnvironmentHealth>>({});
   const [connectionStatus, setConnectionStatus] = useState<Record<string, ConnectionStatus>>({});
+  const [endpointHealth, setEndpointHealth] = useState<Record<string, EndpointHealth[]>>({});
   const [loops, setLoops] = useState<LoopMeta[]>([]);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
   const filterRef = useRef<HTMLInputElement | null>(null);
 
-  const selected: Instance | null = instances.find((i) => i.id === selectedId) ?? null;
+  const selected: Environment | null = environments.find((e) => e.id === selectedId) ?? null;
 
-  // Listen to connection supervisor status changes pushed from main process.
-  // In mock mode, fall back to simple poll-based health.
   useEffect(() => {
     if (!window.api) return;
 
     const unsub = window.api.connection.onStatusChange(
-      (instanceId: string, status: ConnectionStatus) => {
+      (environmentId: string, status: ConnectionStatus) => {
         const h = phaseToHealth(status.phase);
-        setHealth((prev) => (prev[instanceId] === h ? prev : { ...prev, [instanceId]: h }));
+        setHealth((prev) => (prev[environmentId] === h ? prev : { ...prev, [environmentId]: h }));
         setConnectionStatus((prev) =>
-          prev[instanceId] === status ? prev : { ...prev, [instanceId]: status },
+          prev[environmentId] === status ? prev : { ...prev, [environmentId]: status },
         );
       },
     );
     return unsub;
   }, []);
 
-  // Mock-mode fallback: poll-based health (no supervisor in plain browser).
   useEffect(() => {
-    if (window.api || instances.length === 0) return;
+    if (window.api || environments.length === 0) return;
     let cancelled = false;
 
     const check = async (): Promise<void> => {
-      for (const instance of instances) {
-        const res = await fetchLoops(instance);
+      for (const env of environments) {
+        const res = await fetchLoops(env);
         if (cancelled) return;
-        const h: InstanceHealth = res.ok ? "ok" : "offline";
-        setHealth((prev) => (prev[instance.id] === h ? prev : { ...prev, [instance.id]: h }));
+        const h: EnvironmentHealth = res.ok ? "ok" : "offline";
+        setHealth((prev) => (prev[env.id] === h ? prev : { ...prev, [env.id]: h }));
       }
     };
 
@@ -91,30 +89,28 @@ export function App(): React.ReactNode {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [instances]);
+  }, [environments]);
 
-  // Initial status fetch for all instances on load / when instances change.
   useEffect(() => {
-    if (!window.api || instances.length === 0) return;
+    if (!window.api || environments.length === 0) return;
     let cancelled = false;
 
     const fetchAll = async (): Promise<void> => {
-      for (const instance of instances) {
-        const status = await window.api!.connection.getStatus(instance.id);
+      for (const env of environments) {
+        const status = await window.api!.connection.getStatus(env.id);
         if (cancelled || !status) return;
         const h = phaseToHealth(status.phase);
-        setHealth((prev) => (prev[instance.id] === h ? prev : { ...prev, [instance.id]: h }));
+        setHealth((prev) => (prev[env.id] === h ? prev : { ...prev, [env.id]: h }));
         setConnectionStatus((prev) =>
-          prev[instance.id] === status ? prev : { ...prev, [instance.id]: status },
+          prev[env.id] === status ? prev : { ...prev, [env.id]: status },
         );
       }
     };
 
     void fetchAll();
     return () => { cancelled = true; };
-  }, [instances]);
+  }, [environments]);
 
-  // Report OS online/offline to main process so supervisors can park.
   useEffect(() => {
     if (!window.api) return;
 
@@ -132,15 +128,12 @@ export function App(): React.ReactNode {
     };
   }, []);
 
-  // Poll loops for the selected instance (data only; health is driven by the
-  // connection supervisor). refreshTick allows a manual refresh.
   useEffect(() => {
     if (!selected) {
       setLoops([]);
       return;
     }
 
-    // Only poll when the supervisor says we're connected.
     const connStatus = connectionStatus[selected.id];
     if (connStatus && connStatus.phase !== "connected") {
       setLoops([]);
@@ -164,7 +157,7 @@ export function App(): React.ReactNode {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [selected?.id, selected?.baseUrl, refreshTick, connectionStatus[selected?.id ?? ""]?.phase]);
+  }, [selected?.id, selected?.activeEndpointId, refreshTick, connectionStatus[selected?.id ?? ""]?.phase]);
 
   const handleSelect = (id: string): void => {
     select(id);
@@ -187,8 +180,8 @@ export function App(): React.ReactNode {
 
   const handleAdd = (name: string, baseUrl: string): void => {
     void (async () => {
-      const instance = await add(name, baseUrl);
-      handleSelect(instance.id);
+      const env = await add(name, baseUrl);
+      handleSelect(env.id);
       setModalOpen(false);
     })();
   };
@@ -202,12 +195,22 @@ export function App(): React.ReactNode {
     });
   };
 
+  const handleSetEndpoint = (environmentId: string, endpointId: string): void => {
+    setActiveEndpoint(environmentId, endpointId);
+  };
+
   const openLoop = (loopId: string): void => setView({ kind: "loop", loopId });
   const goBack = (): void => setView({ kind: "list" });
 
   const inDetail = view.kind === "loop";
   const updatedLabel =
     lastUpdated === null ? "…" : timeAgo(new Date(lastUpdated).toISOString());
+
+  const activeEndpoint = selected
+    ? (selected.activeEndpointId
+        ? selected.endpoints.find((ep) => ep.id === selected.activeEndpointId)
+        : selected.endpoints[0])
+    : null;
 
   return (
     <div className="app">
@@ -244,14 +247,16 @@ export function App(): React.ReactNode {
           <aside className="panel sidebar-panel">
             <SegmentedTabs active={section} onChange={handleSection} disabled={!selected} />
             <Sidebar
-              instances={instances}
+              environments={environments}
               selectedId={selectedId}
               health={health}
               connectionStatus={connectionStatus}
+              endpointHealth={endpointHealth}
               onSelect={handleSelect}
               onAdd={() => setModalOpen(true)}
               onRemove={handleRemove}
               onRetry={handleRetry}
+              onSetEndpoint={handleSetEndpoint}
             />
           </aside>
         ) : null}
@@ -260,7 +265,9 @@ export function App(): React.ReactNode {
           {selected ? (
             <div className="main-header">
               <span className="main-title">{selected.name}</span>
-              <span className="chip mono">{hostLabel(selected.baseUrl)}</span>
+              {activeEndpoint ? (
+                <span className="chip mono">{hostLabel(activeEndpoint.url)}</span>
+              ) : null}
               <span className="main-header-meta">
                 {(() => {
                   const h = health[selected.id] ?? "unknown";
@@ -283,13 +290,13 @@ export function App(): React.ReactNode {
                 <span className="glyph">
                   <Icon name="rotate" size={30} strokeWidth={1.2} />
                 </span>
-                <h3>No instance selected</h3>
+                <h3>No environment selected</h3>
                 <p>
-                  Add a loop-task instance by its API URL (for example{" "}
+                  Add a loop-task environment by its API URL (for example{" "}
                   <code>http://127.0.0.1:8845</code>) to see its loops, tasks, and projects.
                 </p>
                 <button className="btn primary" onClick={() => setModalOpen(true)}>
-                  Add instance
+                  Add environment
                 </button>
               </div>
             ) : inDetail ? (
@@ -325,7 +332,7 @@ export function App(): React.ReactNode {
                 />
                 <div className="prompt-row">
                   <span className="prompt-chip">{SECTION_LABELS[section]}</span>
-                  <span className="prompt-meta">{hostLabel(selected.baseUrl)}</span>
+                  <span className="prompt-meta">{activeEndpoint ? hostLabel(activeEndpoint.url) : ""}</span>
                   <span style={{ flex: 1 }} />
                   {section === "loops" ? (
                     <span className="prompt-meta mono">{loops.length} loops</span>

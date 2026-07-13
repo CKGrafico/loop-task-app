@@ -5,32 +5,37 @@ import type {
   ApiRequestArgs,
   ApiResponse,
   ConnectionStatus,
+  EndpointHealth,
   StreamSubscribeArgs,
 } from "../shared/ipc.js";
+import type { Environment } from "../shared/ipc.js";
 import {
-  getInstances,
-  addInstance,
-  removeInstance,
-  getSelectedInstanceId,
-  setSelectedInstanceId,
+  getEnvironments,
+  addEnvironment,
+  removeEnvironment,
+  addEndpoint,
+  removeEndpoint,
+  setActiveEndpoint,
+  getSelectedEnvironmentId,
+  setSelectedEnvironmentId,
   migrateFromLocalStorage,
+  updateEndpointHealth,
 } from "./config-store.js";
 import {
   ConnectionSupervisor,
   makeProbe,
+  resolveActiveUrl,
+  fetchFingerprint,
 } from "./connection-supervisor.js";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
-/** Active SSE subscriptions, keyed by subId. */
 const streams = new Map<string, AbortController>();
 
-/** Connection supervisors, keyed by instance ID. */
 const supervisors = new Map<string, ConnectionSupervisor>();
 
-/** Get or create a supervisor for an instance. */
-function getOrCreateSupervisor(instanceId: string, baseUrl: string): ConnectionSupervisor {
-  let existing = supervisors.get(instanceId);
+function getOrCreateSupervisor(environmentId: string, baseUrl: string): ConnectionSupervisor {
+  let existing = supervisors.get(environmentId);
   if (existing) return existing;
 
   const supervisor = new ConnectionSupervisor(
@@ -38,32 +43,29 @@ function getOrCreateSupervisor(instanceId: string, baseUrl: string): ConnectionS
     (status: ConnectionStatus) => {
       const win = BrowserWindow.getAllWindows()[0];
       if (win && !win.isDestroyed()) {
-        win.webContents.send("connection:status", { instanceId, status });
+        win.webContents.send("connection:status", { environmentId, status });
       }
     },
   );
-  supervisors.set(instanceId, supervisor);
+  supervisors.set(environmentId, supervisor);
   supervisor.start();
   return supervisor;
 }
 
-/** Remove a supervisor when its instance is removed. */
-function removeSupervisor(instanceId: string): void {
-  const supervisor = supervisors.get(instanceId);
+function removeSupervisor(environmentId: string): void {
+  const supervisor = supervisors.get(environmentId);
   if (supervisor) {
     supervisor.destroy();
-    supervisors.delete(instanceId);
+    supervisors.delete(environmentId);
   }
 }
 
-/** Wakeup all supervisors (network change, app focus, manual retry). */
 function wakeupAll(): void {
   for (const supervisor of supervisors.values()) {
     supervisor.wakeup();
   }
 }
 
-/** Whether the OS reports no network. When true, supervisors park in offline. */
 let osOffline = false;
 
 function setOsOffline(value: boolean): void {
@@ -89,7 +91,7 @@ function joinUrl(baseUrl: string, apiPath: string): string {
 
 async function handleApiRequest(args: ApiRequestArgs): Promise<ApiResponse> {
   if (!isAllowedBaseUrl(args.baseUrl)) {
-    return { ok: false, status: 0, error: `Invalid instance URL: ${args.baseUrl}` };
+    return { ok: false, status: 0, error: `Invalid environment URL: ${args.baseUrl}` };
   }
 
   const controller = new AbortController();
@@ -111,7 +113,6 @@ async function handleApiRequest(args: ApiRequestArgs): Promise<ApiResponse> {
       // keep raw text for non-JSON responses
     }
 
-    // loop-task envelopes responses as { ok, data } / { ok, error: { message } }.
     if (parsed && typeof parsed === "object" && "ok" in parsed) {
       const envelope = parsed as { ok: boolean; data?: unknown; error?: { message?: string } };
       if (envelope.ok) {
@@ -134,10 +135,6 @@ async function handleApiRequest(args: ApiRequestArgs): Promise<ApiResponse> {
   }
 }
 
-/**
- * Minimal SSE client: reads the response body incrementally and forwards
- * `data:` lines / `event:` names to the renderer as stream events.
- */
 async function handleStreamSubscribe(
   sender: Electron.WebContents,
   args: StreamSubscribeArgs,
@@ -192,8 +189,6 @@ async function handleStreamSubscribe(
   }
 }
 
-// ── Window bounds persistence ────────────────────────────────────────
-
 interface WindowBounds {
   x?: number;
   y?: number;
@@ -223,6 +218,15 @@ function saveBounds(win: BrowserWindow): void {
     fs.writeFileSync(boundsFile(), JSON.stringify(bounds));
   } catch {
     // non-fatal
+  }
+}
+
+function seedSupervisors(): void {
+  for (const env of getEnvironments()) {
+    const url = resolveActiveUrl(env.endpoints, env.activeEndpointId);
+    if (url) {
+      getOrCreateSupervisor(env.id, url);
+    }
   }
 }
 
@@ -266,7 +270,6 @@ function createWindow(): void {
   win.on("move", scheduleSave);
   win.on("close", () => saveBounds(win));
 
-  // External links open in the system browser, never inside the app.
   win.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);
     return { action: "deny" };
@@ -278,15 +281,11 @@ function createWindow(): void {
     void win.loadFile(path.join(import.meta.dirname, "../renderer/index.html"));
   }
 
-  // On app focus (window activated after sleep/alt-tab), fire a cheap probe
-  // on all supervisors. A socket can look alive after machine sleep while
-  // being dead.
   win.on("focus", () => {
     wakeupAll();
   });
 }
 
-// Single-instance: a second launch focuses the existing window instead.
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
@@ -314,19 +313,39 @@ app.whenReady().then(() => {
     streams.delete(subId);
   });
 
-  ipcMain.handle("config:getInstances", () => getInstances());
-  ipcMain.handle("config:addInstance", (_event, name: string, baseUrl: string) => {
-    const instance = addInstance(name, baseUrl);
-    getOrCreateSupervisor(instance.id, instance.baseUrl);
-    return instance;
+  ipcMain.handle("config:getEnvironments", () => getEnvironments());
+  ipcMain.handle("config:addEnvironment", (_event, name: string, url: string, kind?: string) => {
+    const env = addEnvironment(name, url, (kind as "direct" | "ssh" | "tailscale") ?? "direct");
+    const activeUrl = resolveActiveUrl(env.endpoints, env.activeEndpointId);
+    if (activeUrl) getOrCreateSupervisor(env.id, activeUrl);
+    return env;
   });
-  ipcMain.handle("config:removeInstance", (_event, id: string) => {
+  ipcMain.handle("config:removeEnvironment", (_event, id: string) => {
     removeSupervisor(id);
-    removeInstance(id);
+    removeEnvironment(id);
   });
-  ipcMain.handle("config:getSelectedInstanceId", () => getSelectedInstanceId());
-  ipcMain.handle("config:setSelectedInstanceId", (_event, id: string | null) =>
-    setSelectedInstanceId(id),
+  ipcMain.handle("config:addEndpoint", (_event, environmentId: string, url: string, kind: string) => {
+    const ep = addEndpoint(environmentId, url, kind as "direct" | "ssh" | "tailscale");
+    return ep;
+  });
+  ipcMain.handle("config:removeEndpoint", (_event, environmentId: string, endpointId: string) => {
+    removeEndpoint(environmentId, endpointId);
+  });
+  ipcMain.handle("config:setActiveEndpoint", (_event, environmentId: string, endpointId: string) => {
+    setActiveEndpoint(environmentId, endpointId);
+    const envs = getEnvironments();
+    const env = envs.find((e: Environment) => e.id === environmentId);
+    if (env) {
+      const url = resolveActiveUrl(env.endpoints, endpointId);
+      if (url) {
+        removeSupervisor(environmentId);
+        getOrCreateSupervisor(environmentId, url);
+      }
+    }
+  });
+  ipcMain.handle("config:getSelectedEnvironmentId", () => getSelectedEnvironmentId());
+  ipcMain.handle("config:setSelectedEnvironmentId", (_event, id: string | null) =>
+    setSelectedEnvironmentId(id),
   );
   ipcMain.handle(
     "config:migrateFromLocalStorage",
@@ -334,14 +353,25 @@ app.whenReady().then(() => {
       migrateFromLocalStorage(rawInstances, rawSelectedId),
   );
 
-  // ── Connection supervisor IPC ───────────────────────────────────────
-  ipcMain.handle("connection:getStatus", (_event, instanceId: string) => {
-    const supervisor = supervisors.get(instanceId);
+  ipcMain.handle("connection:getStatus", (_event, environmentId: string) => {
+    const supervisor = supervisors.get(environmentId);
     return supervisor ? supervisor.getStatus() : null;
   });
 
-  ipcMain.handle("connection:retry", (_event, instanceId: string) => {
-    const supervisor = supervisors.get(instanceId);
+  ipcMain.handle("connection:getEndpointHealth", (_event, environmentId: string): EndpointHealth[] => {
+    const envs = getEnvironments();
+    const env = envs.find((e: Environment) => e.id === environmentId);
+    if (!env) return [];
+    return env.endpoints.map((ep) => ({
+      endpointId: ep.id,
+      phase: ep.failureCount > 0 && ep.lastError ? "backoff" as const : "connected" as const,
+      lastError: ep.lastError,
+      failureCount: ep.failureCount,
+    }));
+  });
+
+  ipcMain.handle("connection:retry", (_event, environmentId: string) => {
+    const supervisor = supervisors.get(environmentId);
     if (supervisor) supervisor.wakeup();
   });
 
@@ -349,11 +379,11 @@ app.whenReady().then(() => {
     setOsOffline(!online);
   });
 
-  // ── Seed supervisors for existing instances ─────────────────────────
-  for (const instance of getInstances()) {
-    getOrCreateSupervisor(instance.id, instance.baseUrl);
-  }
+  ipcMain.handle("connection:fetchFingerprint", async (_event, baseUrl: string) => {
+    return fetchFingerprint(baseUrl);
+  });
 
+  seedSupervisors();
   createWindow();
 
   app.on("activate", () => {

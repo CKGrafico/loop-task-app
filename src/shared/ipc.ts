@@ -1,7 +1,7 @@
 // Shared IPC contract between main, preload, and renderer.
-// All HTTP to loop-task instances runs in the MAIN process: the loop-task
+// All HTTP to loop-task environments runs in the MAIN process: the loop-task
 // daemon sends no CORS headers, so renderer fetch would be blocked — and
-// main-process fetch also works unchanged for instances on remote VMs.
+// main-process fetch also works unchanged for environments on remote VMs.
 
 export interface ApiRequestArgs {
   baseUrl: string;
@@ -27,24 +27,37 @@ export interface StreamSubscribeArgs {
 export interface StreamEventPayload {
   subId: string;
   kind: "data" | "event" | "end" | "error";
-  /** Line content for "data", event name for "event", message for "error". */
   text: string;
 }
 
 // ── Config store (electron-store) ───────────────────────────────────
 
-export interface Instance {
+export type EndpointKind = "direct" | "ssh" | "tailscale";
+
+export interface AccessEndpoint {
+  id: string;
+  kind: EndpointKind;
+  url: string;
+  lastError: string | null;
+  failureCount: number;
+}
+
+export interface Environment {
   id: string;
   name: string;
-  baseUrl: string;
+  endpoints: AccessEndpoint[];
+  activeEndpointId: string | null;
 }
 
 export interface ConfigBridge {
-  getInstances: () => Promise<Instance[]>;
-  addInstance: (name: string, baseUrl: string) => Promise<Instance>;
-  removeInstance: (id: string) => Promise<void>;
-  getSelectedInstanceId: () => Promise<string | null>;
-  setSelectedInstanceId: (id: string | null) => Promise<void>;
+  getEnvironments: () => Promise<Environment[]>;
+  addEnvironment: (name: string, url: string, kind?: EndpointKind) => Promise<Environment>;
+  removeEnvironment: (id: string) => Promise<void>;
+  addEndpoint: (environmentId: string, url: string, kind: EndpointKind) => Promise<AccessEndpoint | null>;
+  removeEndpoint: (environmentId: string, endpointId: string) => Promise<void>;
+  setActiveEndpoint: (environmentId: string, endpointId: string) => Promise<void>;
+  getSelectedEnvironmentId: () => Promise<string | null>;
+  setSelectedEnvironmentId: (id: string | null) => Promise<void>;
   migrateFromLocalStorage: (rawInstances: string, rawSelectedId: string | null) => Promise<boolean>;
 }
 
@@ -66,12 +79,21 @@ export interface ConnectionStatus {
   lastConnectedAt: number | null;
 }
 
+export interface EndpointHealth {
+  endpointId: string;
+  phase: ConnectionPhase;
+  lastError: string | null;
+  failureCount: number;
+}
+
 // ── Full IPC bridge ─────────────────────────────────────────────────
 
 export interface ConnectionBridge {
-  getStatus: (instanceId: string) => Promise<ConnectionStatus | null>;
-  retry: (instanceId: string) => Promise<void>;
-  onStatusChange: (cb: (instanceId: string, status: ConnectionStatus) => void) => () => void;
+  getStatus: (environmentId: string) => Promise<ConnectionStatus | null>;
+  getEndpointHealth: (environmentId: string) => Promise<EndpointHealth[]>;
+  retry: (environmentId: string) => Promise<void>;
+  onStatusChange: (cb: (environmentId: string, status: ConnectionStatus) => void) => () => void;
+  onEndpointHealthChange: (cb: (environmentId: string, health: EndpointHealth[]) => void) => () => void;
   notifyNetworkChanged: (online: boolean) => void;
 }
 

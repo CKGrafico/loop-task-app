@@ -1,12 +1,4 @@
-/**
- * Connection supervisor — owns the full lifecycle of a single instance's
- * connection health. Replaces the raw "did the last 5s poll succeed?" model
- * with explicit phases, exponential backoff, and error classification.
- *
- * One supervisor per registered instance, living in the main process.
- */
-
-// ── Types ────────────────────────────────────────────────────────────
+import type { AccessEndpoint, EndpointHealth } from "../shared/ipc.js";
 
 export type ConnectionPhase =
   | "offline"
@@ -21,11 +13,8 @@ export interface ConnectionStatus {
   phase: ConnectionPhase;
   lastError: string | null;
   errorClass: ErrorClass | null;
-  /** How many consecutive failures (resets after STABLE_MS). */
   failureCount: number;
-  /** Current backoff delay in ms (1s, 2s, 4s, 8s, 16s cap). */
   backoffMs: number;
-  /** Epoch-ms of the last successful connection. */
   lastConnectedAt: number | null;
 }
 
@@ -35,14 +24,11 @@ interface ProbeResult {
   error: string | null;
 }
 
-// ── Constants ────────────────────────────────────────────────────────
-
 const INITIAL_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_MS = 16_000;
 const STABLE_MS = 30_000;
 const PROBE_TIMEOUT_MS = 5_000;
-
-// ── Error classification ─────────────────────────────────────────────
+const FINGERPRINT_TIMEOUT_MS = 3_000;
 
 function classifyError(
   status: number,
@@ -76,8 +62,6 @@ function isNetworkDownError(message: string): boolean {
   );
 }
 
-// ── Supervisor ───────────────────────────────────────────────────────
-
 export class ConnectionSupervisor {
   private phase: ConnectionPhase = "offline";
   private lastError: string | null = null;
@@ -102,8 +86,6 @@ export class ConnectionSupervisor {
     this.probe = probe;
     this.onChange = onChange;
   }
-
-  // ── Public API ───────────────────────────────────────────────────
 
   start(): void {
     if (this.destroyed) return;
@@ -139,8 +121,6 @@ export class ConnectionSupervisor {
       lastConnectedAt: this.lastConnectedAt,
     };
   }
-
-  // ── Connection lifecycle ──────────────────────────────────────────
 
   private scheduleConnect(): void {
     if (this.destroyed || this.probeInFlight) return;
@@ -220,8 +200,6 @@ export class ConnectionSupervisor {
     this.scheduleRetry();
   }
 
-  // ── Retry scheduling ──────────────────────────────────────────────
-
   private scheduleRetry(): void {
     if (this.destroyed) return;
     this.clearRetryTimer();
@@ -239,8 +217,6 @@ export class ConnectionSupervisor {
       this.retryTimer = null;
     }
   }
-
-  // ── Stable-connection check ──────────────────────────────────────
 
   private startStableCheck(): void {
     this.clearStableCheck();
@@ -266,8 +242,6 @@ export class ConnectionSupervisor {
     }
   }
 
-  // ── State emission ────────────────────────────────────────────────
-
   private setPhase(next: ConnectionPhase): void {
     if (this.phase === next) return;
     this.phase = next;
@@ -279,8 +253,6 @@ export class ConnectionSupervisor {
     this.onChange(this.getStatus());
   }
 }
-
-// ── Helpers for main process ─────────────────────────────────────────
 
 export function makeProbe(baseUrl: string): () => Promise<ProbeResult> {
   return async (): Promise<ProbeResult> => {
@@ -330,4 +302,47 @@ export function makeProbe(baseUrl: string): () => Promise<ProbeResult> {
       return { ok: false, status: 0, error: message };
     }
   };
+}
+
+export function makeEndpointProbe(baseUrl: string): () => Promise<ProbeResult> {
+  return makeProbe(baseUrl);
+}
+
+export interface EnvironmentFingerprint {
+  id: string;
+  label: string;
+}
+
+export async function fetchFingerprint(baseUrl: string): Promise<EnvironmentFingerprint | null> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), FINGERPRINT_TIMEOUT_MS);
+
+    const res = await fetch(`${baseUrl.replace(/\/+$/, "")}/.well-known/orbion/environment`, {
+      method: "GET",
+      signal: controller.signal,
+      headers: { Accept: "application/json" },
+    });
+
+    clearTimeout(timeout);
+
+    if (!res.ok) return null;
+
+    const data = await res.json() as unknown;
+    if (typeof data === "object" && data !== null && "id" in data && "label" in data) {
+      return data as EnvironmentFingerprint;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function resolveActiveUrl(endpoints: AccessEndpoint[], activeEndpointId: string | null): string | null {
+  if (endpoints.length === 0) return null;
+  if (activeEndpointId) {
+    const ep = endpoints.find((e) => e.id === activeEndpointId);
+    if (ep) return ep.url;
+  }
+  return endpoints[0].url;
 }
