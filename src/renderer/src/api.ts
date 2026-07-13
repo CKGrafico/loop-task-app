@@ -1,5 +1,5 @@
 import type { ApiResponse, StreamEventPayload } from "../../shared/ipc";
-import type { Environment, Instance, LoopMeta, Project, TaskDefinition } from "./types";
+import type { Environment, LoopMeta, Project, TaskDefinition } from "./types";
 import { mockRequest, mockSubscribeLogs } from "./mock";
 
 export const isMock = typeof window !== "undefined" && !window.api;
@@ -98,4 +98,4 @@ export function subscribeLogs(
   };
 }
 
-export { type Instance };
+

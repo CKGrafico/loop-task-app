@@ -5,7 +5,7 @@ import { useEnvironments } from "./store";
 import { fetchLoops, isMock, resolveBaseUrl } from "./api";
 import { Sidebar } from "./components/Sidebar";
 import { SegmentedTabs } from "./components/SegmentedTabs";
-import { AddInstanceModal } from "./components/AddInstanceModal";
+import { AddEnvironmentModal } from "./components/AddInstanceModal";
 import { LoopsView } from "./components/LoopsView";
 import { LoopDetail } from "./components/LoopDetail";
 import { TasksView } from "./components/TasksView";
@@ -65,6 +65,23 @@ export function App(): React.ReactNode {
         setConnectionStatus((prev) =>
           prev[environmentId] === status ? prev : { ...prev, [environmentId]: status },
         );
+      },
+    );
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    if (!window.api) return;
+
+    const unsub = window.api.connection.onEndpointHealthChange(
+      (environmentId: string, health: EndpointHealth[]) => {
+        setEndpointHealth((prev) => {
+          const existing = prev[environmentId];
+          if (existing && existing.length === health.length && existing.every((h, i) => h.endpointId === health[i].endpointId && h.phase === health[i].phase)) {
+            return prev;
+          }
+          return { ...prev, [environmentId]: health };
+        });
       },
     );
     return unsub;
@@ -352,7 +369,7 @@ export function App(): React.ReactNode {
       </div>
 
       {modalOpen ? (
-        <AddInstanceModal onSubmit={handleAdd} onCancel={() => setModalOpen(false)} />
+        <AddEnvironmentModal onSubmit={handleAdd} onCancel={() => setModalOpen(false)} />
       ) : null}
     </div>
   );

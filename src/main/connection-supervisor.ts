@@ -38,7 +38,7 @@ function classifyError(
   if (errorMessage) {
     const lower = errorMessage.toLowerCase();
     if (
-      lower.includes("invalid instance url") ||
+      lower.includes("invalid environment url") ||
       lower.includes("unsupported protocol")
     ) {
       return "blocking";
@@ -345,4 +345,72 @@ export function resolveActiveUrl(endpoints: AccessEndpoint[], activeEndpointId: 
     if (ep) return ep.url;
   }
   return endpoints[0].url;
+}
+
+export class EndpointHealthTracker {
+  private health = new Map<string, { lastError: string | null; failureCount: number }>();
+  private supervisors = new Map<string, ConnectionSupervisor>();
+  private readonly environmentId: string;
+  private readonly onHealthChange: (health: EndpointHealth[]) => void;
+
+  constructor(
+    environmentId: string,
+    onHealthChange: (health: EndpointHealth[]) => void,
+  ) {
+    this.environmentId = environmentId;
+    this.onHealthChange = onHealthChange;
+  }
+
+  syncEndpoints(endpoints: AccessEndpoint[]): void {
+    const currentIds = new Set(this.supervisors.keys());
+    const newIds = new Set(endpoints.map((e) => e.id));
+
+    for (const id of currentIds) {
+      if (!newIds.has(id)) {
+        this.supervisors.get(id)!.destroy();
+        this.supervisors.delete(id);
+        this.health.delete(id);
+      }
+    }
+
+    for (const ep of endpoints) {
+      if (!this.supervisors.has(ep.id)) {
+        const supervisor = new ConnectionSupervisor(
+          makeEndpointProbe(ep.url),
+          (status) => {
+            this.health.set(ep.id, {
+              lastError: status.lastError,
+              failureCount: status.failureCount,
+            });
+            this.onHealthChange(this.getHealth());
+          },
+        );
+        this.supervisors.set(ep.id, supervisor);
+        supervisor.start();
+      }
+    }
+
+    this.onHealthChange(this.getHealth());
+  }
+
+  getHealth(): EndpointHealth[] {
+    const result: EndpointHealth[] = [];
+    for (const [id, h] of this.health) {
+      result.push({
+        endpointId: id,
+        phase: h.failureCount > 0 && h.lastError ? "backoff" : "connected",
+        lastError: h.lastError,
+        failureCount: h.failureCount,
+      });
+    }
+    return result;
+  }
+
+  destroy(): void {
+    for (const supervisor of this.supervisors.values()) {
+      supervisor.destroy();
+    }
+    this.supervisors.clear();
+    this.health.clear();
+  }
 }

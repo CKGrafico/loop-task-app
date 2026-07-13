@@ -1,5 +1,7 @@
 import type { EndpointKind } from "../../shared/ipc";
 
+export type { EndpointKind };
+
 export type LoopStatus = "running" | "waiting" | "paused" | "idle" | "stopped";
 
 export interface RunRecord {

@@ -8,8 +8,12 @@ interface LegacyInstance {
   baseUrl: string;
 }
 
+interface EnvironmentWithFingerprint extends Environment {
+  fingerprintId?: string;
+}
+
 interface ConfigSchema {
-  environments: Environment[];
+  environments: EnvironmentWithFingerprint[];
   selectedEnvironmentId: string | null;
   instances: LegacyInstance[];
   selectedInstanceId: string | null;
@@ -58,9 +62,23 @@ function ensureMigrated(): void {
   store.set("instancesMigrated", true);
 }
 
-export function getEnvironments(): Environment[] {
+export function getEnvironments(): EnvironmentWithFingerprint[] {
   ensureMigrated();
   return store.get("environments", []);
+}
+
+export function findEnvironmentByFingerprint(fingerprintId: string): EnvironmentWithFingerprint | undefined {
+  ensureMigrated();
+  const envs = store.get("environments", []);
+  return envs.find((e) => e.fingerprintId === fingerprintId);
+}
+
+export function setEnvironmentFingerprintId(environmentId: string, fingerprintId: string): void {
+  const envs = store.get("environments", []);
+  const env = envs.find((e) => e.id === environmentId);
+  if (!env) return;
+  env.fingerprintId = fingerprintId;
+  store.set("environments", envs);
 }
 
 export function addEnvironment(name: string, url: string, kind: EndpointKind = "direct"): Environment {

@@ -12,6 +12,12 @@ const HEALTH_COLORS: Record<EnvironmentHealth, string> = {
   blocked: "#e040e0",
 };
 
+const ENDPOINT_PHASE_COLORS: Record<string, string> = {
+  connected: "#a9d95c",
+  backoff: "#f08040",
+  offline: "#ff8484",
+};
+
 const KIND_LABELS: Record<string, string> = {
   direct: "Direct",
   ssh: "SSH",
@@ -120,7 +126,9 @@ export function Sidebar(props: {
               </button>
               {env.endpoints.length > 1 && env.id === selectedId ? (
                 <div style={{ paddingLeft: 12 }}>
-                  {env.endpoints.map((ep) => (
+                  {env.endpoints.map((ep) => {
+                    const epH = epHealth?.find((h) => h.endpointId === ep.id);
+                    return (
                     <button
                       key={ep.id}
                       className={`instance-item${ep.id === env.activeEndpointId ? " selected" : ""}`}
@@ -129,19 +137,25 @@ export function Sidebar(props: {
                         e.stopPropagation();
                         onSetEndpoint?.(env.id, ep.id);
                       }}
-                      title={endpointLabel(ep)}
+                      title={epH?.lastError ? `${endpointLabel(ep)} — ${epH.lastError}` : endpointLabel(ep)}
                     >
                       <span
                         className="dot"
                         style={{
-                          background: ep.id === env.activeEndpointId ? "#5cb2ff" : "#64718c",
+                          background: ep.id === env.activeEndpointId ? "#5cb2ff" : (epH ? (ENDPOINT_PHASE_COLORS[epH.phase] ?? "#64718c") : "#64718c"),
                           width: 6,
                           height: 6,
                         }}
                       />
                       <span className="name">{KIND_LABELS[ep.kind] ?? ep.kind}: {hostLabel(ep.url)}</span>
+                      {epH && epH.failureCount > 0 ? (
+                        <span className="stat" style={{ fontSize: 9, color: "var(--danger)", marginLeft: 4 }}>
+                          {epH.failureCount}err
+                        </span>
+                      ) : null}
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : null}
             </div>

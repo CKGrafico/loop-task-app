@@ -20,9 +20,12 @@ import {
   setSelectedEnvironmentId,
   migrateFromLocalStorage,
   updateEndpointHealth,
+  findEnvironmentByFingerprint,
+  setEnvironmentFingerprintId,
 } from "./config-store.js";
 import {
   ConnectionSupervisor,
+  EndpointHealthTracker,
   makeProbe,
   resolveActiveUrl,
   fetchFingerprint,
@@ -33,6 +36,7 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 const streams = new Map<string, AbortController>();
 
 const supervisors = new Map<string, ConnectionSupervisor>();
+const endpointTrackers = new Map<string, EndpointHealthTracker>();
 
 function getOrCreateSupervisor(environmentId: string, baseUrl: string): ConnectionSupervisor {
   let existing = supervisors.get(environmentId);
@@ -52,11 +56,34 @@ function getOrCreateSupervisor(environmentId: string, baseUrl: string): Connecti
   return supervisor;
 }
 
+function syncEndpointTracker(environmentId: string): void {
+  const envs = getEnvironments();
+  const env = envs.find((e: Environment) => e.id === environmentId);
+  if (!env) return;
+
+  let tracker = endpointTrackers.get(environmentId);
+  if (!tracker) {
+    tracker = new EndpointHealthTracker(environmentId, (health) => {
+      const win = BrowserWindow.getAllWindows()[0];
+      if (win && !win.isDestroyed()) {
+        win.webContents.send("connection:endpointHealth", { environmentId, health });
+      }
+    });
+    endpointTrackers.set(environmentId, tracker);
+  }
+  tracker.syncEndpoints(env.endpoints);
+}
+
 function removeSupervisor(environmentId: string): void {
   const supervisor = supervisors.get(environmentId);
   if (supervisor) {
     supervisor.destroy();
     supervisors.delete(environmentId);
+  }
+  const tracker = endpointTrackers.get(environmentId);
+  if (tracker) {
+    tracker.destroy();
+    endpointTrackers.delete(environmentId);
   }
 }
 
@@ -227,6 +254,7 @@ function seedSupervisors(): void {
     if (url) {
       getOrCreateSupervisor(env.id, url);
     }
+    syncEndpointTracker(env.id);
   }
 }
 
@@ -314,10 +342,26 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle("config:getEnvironments", () => getEnvironments());
-  ipcMain.handle("config:addEnvironment", (_event, name: string, url: string, kind?: string) => {
-    const env = addEnvironment(name, url, (kind as "direct" | "ssh" | "tailscale") ?? "direct");
+  ipcMain.handle("config:addEnvironment", async (_event, name: string, url: string, kind?: string) => {
+    const endpointKind = (kind as "direct" | "ssh" | "tailscale") ?? "direct";
+    const fingerprint = await fetchFingerprint(url);
+    if (fingerprint) {
+      const existing = findEnvironmentByFingerprint(fingerprint.id);
+      if (existing) {
+        const ep = addEndpoint(existing.id, url, endpointKind);
+        syncEndpointTracker(existing.id);
+        const activeUrl = resolveActiveUrl(existing.endpoints, ep?.id ?? existing.activeEndpointId);
+        if (activeUrl) getOrCreateSupervisor(existing.id, activeUrl);
+        return existing;
+      }
+    }
+    const env = addEnvironment(name, url, endpointKind);
+    if (fingerprint) {
+      setEnvironmentFingerprintId(env.id, fingerprint.id);
+    }
     const activeUrl = resolveActiveUrl(env.endpoints, env.activeEndpointId);
     if (activeUrl) getOrCreateSupervisor(env.id, activeUrl);
+    syncEndpointTracker(env.id);
     return env;
   });
   ipcMain.handle("config:removeEnvironment", (_event, id: string) => {
@@ -326,10 +370,12 @@ app.whenReady().then(() => {
   });
   ipcMain.handle("config:addEndpoint", (_event, environmentId: string, url: string, kind: string) => {
     const ep = addEndpoint(environmentId, url, kind as "direct" | "ssh" | "tailscale");
+    syncEndpointTracker(environmentId);
     return ep;
   });
   ipcMain.handle("config:removeEndpoint", (_event, environmentId: string, endpointId: string) => {
     removeEndpoint(environmentId, endpointId);
+    syncEndpointTracker(environmentId);
   });
   ipcMain.handle("config:setActiveEndpoint", (_event, environmentId: string, endpointId: string) => {
     setActiveEndpoint(environmentId, endpointId);
@@ -342,6 +388,7 @@ app.whenReady().then(() => {
         getOrCreateSupervisor(environmentId, url);
       }
     }
+    syncEndpointTracker(environmentId);
   });
   ipcMain.handle("config:getSelectedEnvironmentId", () => getSelectedEnvironmentId());
   ipcMain.handle("config:setSelectedEnvironmentId", (_event, id: string | null) =>
@@ -359,6 +406,8 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle("connection:getEndpointHealth", (_event, environmentId: string): EndpointHealth[] => {
+    const tracker = endpointTrackers.get(environmentId);
+    if (tracker) return tracker.getHealth();
     const envs = getEnvironments();
     const env = envs.find((e: Environment) => e.id === environmentId);
     if (!env) return [];
@@ -396,5 +445,7 @@ app.on("window-all-closed", () => {
   streams.clear();
   for (const supervisor of supervisors.values()) supervisor.destroy();
   supervisors.clear();
+  for (const tracker of endpointTrackers.values()) tracker.destroy();
+  endpointTrackers.clear();
   if (process.platform !== "darwin") app.quit();
 });

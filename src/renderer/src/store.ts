@@ -1,5 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Environment } from "./types";
+import { apiRequest, resolveBaseUrl } from "./api";
+
+async function probeUrl(url: string): Promise<boolean> {
+  const probeEnv: Environment = {
+    id: "probe",
+    name: "probe",
+    endpoints: [{ id: "probe-ep", kind: "direct" as const, url, lastError: null, failureCount: 0 }],
+    activeEndpointId: "probe-ep",
+  };
+  const res = await apiRequest(probeEnv, "/api/loops");
+  return res.ok;
+}
 
 export function useEnvironments(): {
   environments: Environment[];
@@ -83,11 +95,27 @@ export function useEnvironments(): {
   );
 
   const add = useCallback(async (name: string, baseUrl: string): Promise<Environment> => {
+    const trimmedUrl = baseUrl.trim().replace(/\/+$/, "");
+
     if (window.api) {
-      const env = await window.api.config.addEnvironment(name, baseUrl);
+      const env = await window.api.config.addEnvironment(name, trimmedUrl);
       setEnvironments(await window.api.config.getEnvironments());
       return env;
     }
+
+    for (const env of environments) {
+      const canReach = await probeUrl(trimmedUrl);
+      if (canReach) {
+        for (const ep of env.endpoints) {
+          const epReachable = await probeUrl(ep.url);
+          if (epReachable) {
+            addEndpointFn(env.id, trimmedUrl, "direct");
+            return env;
+          }
+        }
+      }
+    }
+
     const endpointId = crypto.randomUUID().slice(0, 8);
     const env: Environment = {
       id: crypto.randomUUID().slice(0, 8),
@@ -95,7 +123,7 @@ export function useEnvironments(): {
       endpoints: [{
         id: endpointId,
         kind: "direct",
-        url: baseUrl.trim().replace(/\/+$/, ""),
+        url: trimmedUrl,
         lastError: null,
         failureCount: 0,
       }],
@@ -107,7 +135,7 @@ export function useEnvironments(): {
       return next;
     });
     return env;
-  }, []);
+  }, [environments]);
 
   const remove = useCallback(
     (id: string) => {

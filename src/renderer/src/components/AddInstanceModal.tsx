@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { apiRequest, resolveBaseUrl } from "../api";
 import type { Environment } from "../types";
+import { apiRequest } from "../api";
 
-export function AddInstanceModal(props: {
+export function AddEnvironmentModal(props: {
   onSubmit: (name: string, baseUrl: string) => void;
   onCancel: () => void;
 }): React.ReactNode {
