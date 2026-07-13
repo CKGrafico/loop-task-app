@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   ApiRequestArgs,
+  ConnectionStatus,
   StreamSubscribeArgs,
   StreamEventPayload,
   LoopTaskBridge,
@@ -35,6 +36,29 @@ const bridge: LoopTaskBridge = {
       ipcRenderer.invoke("config:setSelectedInstanceId", id),
     migrateFromLocalStorage: (rawInstances: string, rawSelectedId: string | null) =>
       ipcRenderer.invoke("config:migrateFromLocalStorage", rawInstances, rawSelectedId),
+  },
+
+  connection: {
+    getStatus: (instanceId: string) =>
+      ipcRenderer.invoke("connection:getStatus", instanceId) as Promise<ConnectionStatus | null>,
+    retry: (instanceId: string) =>
+      ipcRenderer.invoke("connection:retry", instanceId) as Promise<void>,
+    onStatusChange: (cb: (instanceId: string, status: ConnectionStatus) => void) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        instanceId: string,
+        status: ConnectionStatus,
+      ): void => {
+        cb(instanceId, status);
+      };
+      ipcRenderer.on("connection:status", listener);
+      return () => {
+        ipcRenderer.removeListener("connection:status", listener);
+      };
+    },
+    notifyNetworkChanged: (online: boolean) => {
+      ipcRenderer.send("connection:networkChanged", online);
+    },
   },
 };
 

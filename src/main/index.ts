@@ -4,6 +4,7 @@ import fs from "node:fs";
 import type {
   ApiRequestArgs,
   ApiResponse,
+  ConnectionStatus,
   StreamSubscribeArgs,
 } from "../shared/ipc.js";
 import {
@@ -14,11 +15,64 @@ import {
   setSelectedInstanceId,
   migrateFromLocalStorage,
 } from "./config-store.js";
+import {
+  ConnectionSupervisor,
+  makeProbe,
+} from "./connection-supervisor.js";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
 /** Active SSE subscriptions, keyed by subId. */
 const streams = new Map<string, AbortController>();
+
+/** Connection supervisors, keyed by instance ID. */
+const supervisors = new Map<string, ConnectionSupervisor>();
+
+/** Get or create a supervisor for an instance. */
+function getOrCreateSupervisor(instanceId: string, baseUrl: string): ConnectionSupervisor {
+  let existing = supervisors.get(instanceId);
+  if (existing) return existing;
+
+  const supervisor = new ConnectionSupervisor(
+    makeProbe(baseUrl),
+    (status: ConnectionStatus) => {
+      const win = BrowserWindow.getAllWindows()[0];
+      if (win && !win.isDestroyed()) {
+        win.webContents.send("connection:status", { instanceId, status });
+      }
+    },
+  );
+  supervisors.set(instanceId, supervisor);
+  supervisor.start();
+  return supervisor;
+}
+
+/** Remove a supervisor when its instance is removed. */
+function removeSupervisor(instanceId: string): void {
+  const supervisor = supervisors.get(instanceId);
+  if (supervisor) {
+    supervisor.destroy();
+    supervisors.delete(instanceId);
+  }
+}
+
+/** Wakeup all supervisors (network change, app focus, manual retry). */
+function wakeupAll(): void {
+  for (const supervisor of supervisors.values()) {
+    supervisor.wakeup();
+  }
+}
+
+/** Whether the OS reports no network. When true, supervisors park in offline. */
+let osOffline = false;
+
+function setOsOffline(value: boolean): void {
+  if (osOffline === value) return;
+  osOffline = value;
+  if (!osOffline) {
+    wakeupAll();
+  }
+}
 
 function isAllowedBaseUrl(baseUrl: string): boolean {
   try {
@@ -223,6 +277,13 @@ function createWindow(): void {
   } else {
     void win.loadFile(path.join(import.meta.dirname, "../renderer/index.html"));
   }
+
+  // On app focus (window activated after sleep/alt-tab), fire a cheap probe
+  // on all supervisors. A socket can look alive after machine sleep while
+  // being dead.
+  win.on("focus", () => {
+    wakeupAll();
+  });
 }
 
 // Single-instance: a second launch focuses the existing window instead.
@@ -254,10 +315,15 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle("config:getInstances", () => getInstances());
-  ipcMain.handle("config:addInstance", (_event, name: string, baseUrl: string) =>
-    addInstance(name, baseUrl),
-  );
-  ipcMain.handle("config:removeInstance", (_event, id: string) => removeInstance(id));
+  ipcMain.handle("config:addInstance", (_event, name: string, baseUrl: string) => {
+    const instance = addInstance(name, baseUrl);
+    getOrCreateSupervisor(instance.id, instance.baseUrl);
+    return instance;
+  });
+  ipcMain.handle("config:removeInstance", (_event, id: string) => {
+    removeSupervisor(id);
+    removeInstance(id);
+  });
   ipcMain.handle("config:getSelectedInstanceId", () => getSelectedInstanceId());
   ipcMain.handle("config:setSelectedInstanceId", (_event, id: string | null) =>
     setSelectedInstanceId(id),
@@ -267,6 +333,26 @@ app.whenReady().then(() => {
     (_event, rawInstances: string, rawSelectedId: string | null) =>
       migrateFromLocalStorage(rawInstances, rawSelectedId),
   );
+
+  // ── Connection supervisor IPC ───────────────────────────────────────
+  ipcMain.handle("connection:getStatus", (_event, instanceId: string) => {
+    const supervisor = supervisors.get(instanceId);
+    return supervisor ? supervisor.getStatus() : null;
+  });
+
+  ipcMain.handle("connection:retry", (_event, instanceId: string) => {
+    const supervisor = supervisors.get(instanceId);
+    if (supervisor) supervisor.wakeup();
+  });
+
+  ipcMain.on("connection:networkChanged", (_event, online: boolean) => {
+    setOsOffline(!online);
+  });
+
+  // ── Seed supervisors for existing instances ─────────────────────────
+  for (const instance of getInstances()) {
+    getOrCreateSupervisor(instance.id, instance.baseUrl);
+  }
 
   createWindow();
 
@@ -278,5 +364,7 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => {
   for (const controller of streams.values()) controller.abort();
   streams.clear();
+  for (const supervisor of supervisors.values()) supervisor.destroy();
+  supervisors.clear();
   if (process.platform !== "darwin") app.quit();
 });

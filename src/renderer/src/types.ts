@@ -64,4 +64,4 @@ export interface Instance {
   baseUrl: string;
 }
 
-export type InstanceHealth = "unknown" | "ok" | "offline";
+export type InstanceHealth = "unknown" | "ok" | "offline" | "connecting" | "backoff" | "blocked";

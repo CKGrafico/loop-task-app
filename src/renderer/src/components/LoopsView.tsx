@@ -47,15 +47,16 @@ export function LoopsView(props: {
   const running = loops.filter((l) => l.status === "running").length;
 
   if (loops.length === 0) {
+    const disconnected = health === "offline" || health === "backoff" || health === "blocked";
     return (
       <div className="content-inner">
         <div className="empty">
           <span className="glyph">
             <Icon name="rotate" size={30} strokeWidth={1.2} />
           </span>
-          <h3>{health === "offline" ? "Instance unreachable" : "No loops"}</h3>
+          <h3>{disconnected ? "Instance unreachable" : "No loops"}</h3>
           <p>
-            {health === "offline"
+            {disconnected
               ? `Could not reach ${instance.baseUrl}. Is the loop-task daemon running?`
               : "This instance has no loops yet. Create one with the loop-task CLI or board."}
           </p>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ConnectionStatus } from "../../shared/ipc";
 import type { Instance, InstanceHealth, LoopMeta, Section } from "./types";
 import { useInstances } from "./store";
 import { fetchLoops, isMock } from "./api";
@@ -20,6 +21,23 @@ const SECTION_LABELS: Record<Section, string> = {
   projects: "Projects",
 };
 
+function phaseToHealth(phase: ConnectionStatus["phase"]): InstanceHealth {
+  switch (phase) {
+    case "connected":
+      return "ok";
+    case "connecting":
+      return "connecting";
+    case "backoff":
+      return "backoff";
+    case "blocked":
+      return "blocked";
+    case "offline":
+      return "offline";
+    default:
+      return "unknown";
+  }
+}
+
 export function App(): React.ReactNode {
   const { instances, selectedId, select, add, remove } = useInstances();
   const [section, setSection] = useState<Section>("loops");
@@ -28,6 +46,7 @@ export function App(): React.ReactNode {
   const [modalOpen, setModalOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [health, setHealth] = useState<Record<string, InstanceHealth>>({});
+  const [connectionStatus, setConnectionStatus] = useState<Record<string, ConnectionStatus>>({});
   const [loops, setLoops] = useState<LoopMeta[]>([]);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
@@ -35,18 +54,99 @@ export function App(): React.ReactNode {
 
   const selected: Instance | null = instances.find((i) => i.id === selectedId) ?? null;
 
-  const markHealth = useCallback((id: string, value: InstanceHealth) => {
-    setHealth((prev) => (prev[id] === value ? prev : { ...prev, [id]: value }));
+  // Listen to connection supervisor status changes pushed from main process.
+  // In mock mode, fall back to simple poll-based health.
+  useEffect(() => {
+    if (!window.api) return;
+
+    const unsub = window.api.connection.onStatusChange(
+      (instanceId: string, status: ConnectionStatus) => {
+        const h = phaseToHealth(status.phase);
+        setHealth((prev) => (prev[instanceId] === h ? prev : { ...prev, [instanceId]: h }));
+        setConnectionStatus((prev) =>
+          prev[instanceId] === status ? prev : { ...prev, [instanceId]: status },
+        );
+      },
+    );
+    return unsub;
   }, []);
 
-  // Poll loops for the selected instance (the daemon's /api/events SSE is not
-  // fed server-side, so polling is the reliable option). refreshTick allows a
-  // manual refresh from the prompt bar's action button.
+  // Mock-mode fallback: poll-based health (no supervisor in plain browser).
+  useEffect(() => {
+    if (window.api || instances.length === 0) return;
+    let cancelled = false;
+
+    const check = async (): Promise<void> => {
+      for (const instance of instances) {
+        const res = await fetchLoops(instance);
+        if (cancelled) return;
+        const h: InstanceHealth = res.ok ? "ok" : "offline";
+        setHealth((prev) => (prev[instance.id] === h ? prev : { ...prev, [instance.id]: h }));
+      }
+    };
+
+    void check();
+    const timer = setInterval(() => void check(), 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [instances]);
+
+  // Initial status fetch for all instances on load / when instances change.
+  useEffect(() => {
+    if (!window.api || instances.length === 0) return;
+    let cancelled = false;
+
+    const fetchAll = async (): Promise<void> => {
+      for (const instance of instances) {
+        const status = await window.api!.connection.getStatus(instance.id);
+        if (cancelled || !status) return;
+        const h = phaseToHealth(status.phase);
+        setHealth((prev) => (prev[instance.id] === h ? prev : { ...prev, [instance.id]: h }));
+        setConnectionStatus((prev) =>
+          prev[instance.id] === status ? prev : { ...prev, [instance.id]: status },
+        );
+      }
+    };
+
+    void fetchAll();
+    return () => { cancelled = true; };
+  }, [instances]);
+
+  // Report OS online/offline to main process so supervisors can park.
+  useEffect(() => {
+    if (!window.api) return;
+
+    const report = (): void => {
+      window.api!.connection.notifyNetworkChanged(navigator.onLine);
+    };
+
+    window.addEventListener("online", report);
+    window.addEventListener("offline", report);
+    report();
+
+    return () => {
+      window.removeEventListener("online", report);
+      window.removeEventListener("offline", report);
+    };
+  }, []);
+
+  // Poll loops for the selected instance (data only; health is driven by the
+  // connection supervisor). refreshTick allows a manual refresh.
   useEffect(() => {
     if (!selected) {
       setLoops([]);
       return;
     }
+
+    // Only poll when the supervisor says we're connected.
+    const connStatus = connectionStatus[selected.id];
+    if (connStatus && connStatus.phase !== "connected") {
+      setLoops([]);
+      return;
+    }
+
     let cancelled = false;
 
     const load = async (): Promise<void> => {
@@ -55,9 +155,6 @@ export function App(): React.ReactNode {
       if (res.ok && Array.isArray(res.data)) {
         setLoops(res.data);
         setLastUpdated(Date.now());
-        markHealth(selected.id, "ok");
-      } else {
-        markHealth(selected.id, "offline");
       }
     };
 
@@ -67,29 +164,7 @@ export function App(): React.ReactNode {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [selected?.id, selected?.baseUrl, markHealth, refreshTick]);
-
-  // Background health checks for non-selected instances.
-  useEffect(() => {
-    if (instances.length === 0) return;
-    let cancelled = false;
-
-    const check = async (): Promise<void> => {
-      for (const instance of instances) {
-        if (instance.id === selectedId) continue;
-        const res = await fetchLoops(instance);
-        if (cancelled) return;
-        markHealth(instance.id, res.ok ? "ok" : "offline");
-      }
-    };
-
-    void check();
-    const timer = setInterval(() => void check(), 20000);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [instances, selectedId, markHealth]);
+  }, [selected?.id, selected?.baseUrl, refreshTick, connectionStatus[selected?.id ?? ""]?.phase]);
 
   const handleSelect = (id: string): void => {
     select(id);
@@ -97,6 +172,12 @@ export function App(): React.ReactNode {
     setView({ kind: "list" });
     setFilter("");
   };
+
+  const handleRetry = useCallback((id: string): void => {
+    if (window.api) {
+      void window.api.connection.retry(id);
+    }
+  }, []);
 
   const handleSection = (next: Section): void => {
     setSection(next);
@@ -166,9 +247,11 @@ export function App(): React.ReactNode {
               instances={instances}
               selectedId={selectedId}
               health={health}
+              connectionStatus={connectionStatus}
               onSelect={handleSelect}
               onAdd={() => setModalOpen(true)}
               onRemove={handleRemove}
+              onRetry={handleRetry}
             />
           </aside>
         ) : null}
@@ -179,9 +262,17 @@ export function App(): React.ReactNode {
               <span className="main-title">{selected.name}</span>
               <span className="chip mono">{hostLabel(selected.baseUrl)}</span>
               <span className="main-header-meta">
-                {(health[selected.id] ?? "unknown") === "offline"
-                  ? "offline"
-                  : `updated ${updatedLabel}`}
+                {(() => {
+                  const h = health[selected.id] ?? "unknown";
+                  const cs = connectionStatus[selected.id];
+                  if (cs && cs.phase === "blocked" && cs.lastError) {
+                    return `blocked: ${cs.lastError}`;
+                  }
+                  if (h === "offline" || h === "backoff" || h === "blocked" || h === "connecting") {
+                    return h;
+                  }
+                  return `updated ${updatedLabel}`;
+                })()}
               </span>
             </div>
           ) : null}

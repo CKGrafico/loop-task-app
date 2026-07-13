@@ -48,7 +48,32 @@ export interface ConfigBridge {
   migrateFromLocalStorage: (rawInstances: string, rawSelectedId: string | null) => Promise<boolean>;
 }
 
+// ── Connection supervisor ─────────────────────────────────────────────
+
+export type ConnectionPhase =
+  | "offline"
+  | "connecting"
+  | "connected"
+  | "backoff"
+  | "blocked";
+
+export interface ConnectionStatus {
+  phase: ConnectionPhase;
+  lastError: string | null;
+  errorClass: "transient" | "blocking" | null;
+  failureCount: number;
+  backoffMs: number;
+  lastConnectedAt: number | null;
+}
+
 // ── Full IPC bridge ─────────────────────────────────────────────────
+
+export interface ConnectionBridge {
+  getStatus: (instanceId: string) => Promise<ConnectionStatus | null>;
+  retry: (instanceId: string) => Promise<void>;
+  onStatusChange: (cb: (instanceId: string, status: ConnectionStatus) => void) => () => void;
+  notifyNetworkChanged: (online: boolean) => void;
+}
 
 export interface LoopTaskBridge {
   request: <T = unknown>(args: ApiRequestArgs) => Promise<ApiResponse<T>>;
@@ -56,4 +81,5 @@ export interface LoopTaskBridge {
   unsubscribeStream: (subId: string) => Promise<void>;
   onStreamEvent: (cb: (payload: StreamEventPayload) => void) => () => void;
   config: ConfigBridge;
+  connection: ConnectionBridge;
 }
