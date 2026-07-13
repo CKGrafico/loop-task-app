@@ -1,0 +1,11 @@
+- [x] Create chat types data model (Row kinds: user-message, assistant-message, tool-call, tool-calls-expander, turn-fold)
+- [x] Create useTranscript hook (build rows from turns, toggle collapse/expand, streaming content append)
+- [x] Create useAutoScroll hook (isAtBottom ref tracking, jump-to-latest)
+- [x] Create MarkdownContent component (react-markdown + rehype-highlight, code block with copy, typing indicator)
+- [x] Create ToolCallRow component (icon by kind, title, status glyph, expandable output)
+- [x] Create TranscriptView component (tanstack-virtual virtualizer, toolbar, row rendering)
+- [x] Create mock-session adapter (generate 50 turns × 12 tool calls = 600+ tool calls)
+- [x] Add transcript CSS to theme.css (rows, code blocks, tool calls, turn folds, jump button, hljs overrides)
+- [x] Add "chat" section to types, SegmentedTabs, and App.tsx routing
+- [x] Install dependencies (@tanstack/react-virtual, react-markdown, rehype-highlight, highlight.js)
+- [x] Typecheck passes
