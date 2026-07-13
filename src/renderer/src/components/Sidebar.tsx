@@ -1,7 +1,14 @@
 import type { ConnectionStatus, EndpointHealth } from "../../../shared/ipc";
-import type { Environment, EnvironmentHealth, AccessEndpoint } from "../types";
+import type { Environment, EnvironmentHealth, AccessEndpoint, EnvironmentAuthState } from "../types";
 import { Icon } from "./Icon";
 import { hostLabel } from "../format";
+
+const AUTH_STATE_LABELS: Record<EnvironmentAuthState, string> = {
+  unauthenticated: "no auth",
+  paired: "",
+  blocked: "pair again",
+  unknown: "",
+};
 
 const HEALTH_COLORS: Record<EnvironmentHealth, string> = {
   ok: "#a9d95c",
@@ -52,8 +59,9 @@ export function Sidebar(props: {
   onRemove: (id: string) => void;
   onRetry?: (id: string) => void;
   onSetEndpoint?: (environmentId: string, endpointId: string) => void;
+  onRepair?: (id: string) => void;
 }): React.ReactNode {
-  const { environments, selectedId, health, connectionStatus, endpointHealth, onSelect, onAdd, onRemove, onRetry, onSetEndpoint } = props;
+  const { environments, selectedId, health, connectionStatus, endpointHealth, onSelect, onAdd, onRemove, onRetry, onSetEndpoint, onRepair } = props;
 
   return (
     <div className="sidebar">
@@ -92,6 +100,24 @@ export function Sidebar(props: {
                   style={{ background: HEALTH_COLORS[h] }}
                 />
                 <span className="name">{env.name}</span>
+                {env.authState === "unauthenticated" ? (
+                  <span className="stat" style={{ fontSize: 9, color: "var(--text-muted)", marginRight: 2, opacity: 0.7 }}>
+                    no auth
+                  </span>
+                ) : null}
+                {env.authState === "blocked" && onRepair ? (
+                  <span
+                    className="repair-btn"
+                    role="button"
+                    title="Pair again"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRepair(env.id);
+                    }}
+                  >
+                    pair again
+                  </span>
+                ) : null}
                 {activeEp ? (
                   <span className="stat" style={{ fontSize: 10, color: "var(--text-muted)", marginRight: 2 }}>
                     {KIND_LABELS[activeEp.kind] ?? activeEp.kind}

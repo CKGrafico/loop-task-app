@@ -941,3 +941,45 @@ input {
   padding: 2px 8px;
   font-size: 11px;
 }
+
+.scope-selector {
+  display: flex;
+  gap: 4px;
+}
+
+.scope-option {
+  flex: 1;
+  padding: 6px 8px;
+  font-size: 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.1s;
+}
+
+.scope-option:hover {
+  background: var(--bg-hover);
+}
+
+.scope-option.active {
+  background: var(--bg-active);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.repair-btn {
+  font-size: 9px;
+  color: var(--warning);
+  cursor: pointer;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 204, 92, 0.12);
+  white-space: nowrap;
+}
+
+.repair-btn:hover {
+  background: rgba(255, 204, 92, 0.22);
+}
