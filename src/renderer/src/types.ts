@@ -55,7 +55,7 @@ export interface TaskDefinition {
   createdAt: string;
 }
 
-export type Section = "loops" | "tasks" | "projects";
+export type Section = "loops" | "tasks" | "projects" | "chat";
 
 export interface AccessEndpoint {
   id: string;

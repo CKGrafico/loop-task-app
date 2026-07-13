@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ConnectionStatus, EndpointHealth, OpenCodeConnectionStatus } from "../../shared/ipc";
 import type { Environment, EnvironmentHealth, LoopMeta, Section } from "./types";
 import { useEnvironments } from "./store";
@@ -12,6 +12,8 @@ import { TasksView } from "./components/TasksView";
 import { ProjectsView } from "./components/ProjectsView";
 import { Icon } from "./components/Icon";
 import { hostLabel, timeAgo } from "./format";
+import { TranscriptView } from "./chat/TranscriptView";
+import { generateMockSession, generateStreamingTurn } from "./chat/mock-session";
 
 type View = { kind: "list" } | { kind: "loop"; loopId: string };
 
@@ -19,6 +21,7 @@ const SECTION_LABELS: Record<Section, string> = {
   loops: "Loops",
   tasks: "Tasks",
   projects: "Projects",
+  chat: "Chat",
 };
 
 function phaseToHealth(phase: ConnectionStatus["phase"]): EnvironmentHealth {
@@ -54,6 +57,9 @@ export function App(): React.ReactNode {
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
   const filterRef = useRef<HTMLInputElement | null>(null);
+
+  const mockChatTurns = useMemo(() => generateMockSession(50, 12), []);
+  const mockStreamingTurn = useMemo(() => generateStreamingTurn(), []);
 
   const selected: Environment | null = environments.find((e) => e.id === selectedId) ?? null;
 
@@ -371,6 +377,13 @@ export function App(): React.ReactNode {
               />
             ) : section === "tasks" ? (
               <TasksView instance={selected} filter={filter} />
+            ) : section === "chat" ? (
+              <div className="content content-chat">
+                <TranscriptView
+                  initialTurns={mockChatTurns}
+                  streamingTurn={mockStreamingTurn}
+                />
+              </div>
             ) : (
               <ProjectsView instance={selected} loops={loops} filter={filter} />
             )}

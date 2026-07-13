@@ -3,6 +3,7 @@ import { Icon, type IconName } from "./Icon";
 
 const SECTIONS: { key: Section; label: string; icon: IconName }[] = [
   { key: "loops", label: "Loops", icon: "rotate" },
+  { key: "chat", label: "Chat", icon: "list" },
   { key: "tasks", label: "Tasks", icon: "list" },
   { key: "projects", label: "Projects", icon: "folder" },
 ];
