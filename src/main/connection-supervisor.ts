@@ -1,4 +1,5 @@
 import type { AccessEndpoint, EndpointHealth } from "../shared/ipc.js";
+import { getSessionToken, setEnvironmentAuthState, removeSessionToken } from "./config-store.js";
 
 export type ConnectionPhase =
   | "offline"
@@ -279,18 +280,30 @@ export class ConnectionSupervisor {
   }
 }
 
-export function makeProbe(baseUrl: string): () => Promise<ProbeResult> {
+export function makeProbe(baseUrl: string, environmentId?: string): () => Promise<ProbeResult> {
   return async (): Promise<ProbeResult> => {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
 
+      const headers: Record<string, string> = {};
+      if (environmentId) {
+        const token = getSessionToken(environmentId);
+        if (token) headers["Authorization"] = `Bearer ${token.accessToken}`;
+      }
+
       const res = await fetch(`${baseUrl.replace(/\/+$/, "")}/api/loops`, {
         method: "GET",
         signal: controller.signal,
+        headers,
       });
 
       clearTimeout(timeout);
+
+      if (res.status === 401 && environmentId) {
+        removeSessionToken(environmentId);
+        setEnvironmentAuthState(environmentId, "blocked");
+      }
 
       if (!res.ok) {
         return { ok: false, status: res.status, error: `HTTP ${res.status}` };
@@ -329,8 +342,8 @@ export function makeProbe(baseUrl: string): () => Promise<ProbeResult> {
   };
 }
 
-export function makeEndpointProbe(baseUrl: string): () => Promise<ProbeResult> {
-  return makeProbe(baseUrl);
+export function makeEndpointProbe(baseUrl: string, environmentId?: string): () => Promise<ProbeResult> {
+  return makeProbe(baseUrl, environmentId);
 }
 
 export interface EnvironmentFingerprint {
@@ -384,11 +397,14 @@ export class EndpointHealthTracker {
   private readonly onHealthChange: (health: EndpointHealth[]) => void;
 
   constructor(
-    _environmentId: string,
+    environmentId: string,
     onHealthChange: (health: EndpointHealth[]) => void,
   ) {
+    this._environmentId = environmentId;
     this.onHealthChange = onHealthChange;
   }
+
+  private _environmentId: string;
 
   syncEndpoints(endpoints: AccessEndpoint[]): void {
     const currentIds = new Set(this.supervisors.keys());
@@ -405,7 +421,7 @@ export class EndpointHealthTracker {
     for (const ep of endpoints) {
       if (!this.supervisors.has(ep.id)) {
         const supervisor = new ConnectionSupervisor(
-          makeEndpointProbe(ep.url),
+          makeEndpointProbe(ep.url, this._environmentId),
           (status) => {
             this.health.set(ep.id, {
               lastError: status.lastError,

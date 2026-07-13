@@ -8,7 +8,7 @@ import type {
   EndpointHealth,
   StreamSubscribeArgs,
 } from "../shared/ipc.js";
-import type { Environment } from "../shared/ipc.js";
+import type { Environment, SessionScope } from "../shared/ipc.js";
 import {
   getEnvironments,
   addEnvironment,
@@ -21,6 +21,11 @@ import {
   migrateFromLocalStorage,
   findEnvironmentByFingerprint,
   setEnvironmentFingerprintId,
+  getSessionToken,
+  setEnvironmentAuthState,
+  storeSessionToken,
+  removeSessionToken,
+  exchangePairingCode,
 } from "./config-store.js";
 import {
   ConnectionSupervisor,
@@ -42,8 +47,8 @@ function getOrCreateSupervisor(environmentId: string, baseUrl: string): Connecti
   let existing = supervisors.get(environmentId);
   if (existing) return existing;
 
-  const supervisor = new ConnectionSupervisor(
-    makeProbe(baseUrl),
+    const supervisor = new ConnectionSupervisor(
+    makeProbe(baseUrl, environmentId),
     (status: ConnectionStatus) => {
       const win = BrowserWindow.getAllWindows()[0];
       if (win && !win.isDestroyed()) {
@@ -122,6 +127,17 @@ function joinUrl(baseUrl: string, apiPath: string): string {
   return `${baseUrl.replace(/\/+$/, "")}${apiPath.startsWith("/") ? "" : "/"}${apiPath}`;
 }
 
+function findEnvironmentIdByUrl(baseUrl: string): string | null {
+  const normalized = baseUrl.trim().replace(/\/+$/, "");
+  const envs = getEnvironments();
+  for (const env of envs) {
+    for (const ep of env.endpoints) {
+      if (ep.url.trim().replace(/\/+$/, "") === normalized) return env.id;
+    }
+  }
+  return null;
+}
+
 async function handleApiRequest(args: ApiRequestArgs): Promise<ApiResponse> {
   if (!isAllowedBaseUrl(args.baseUrl)) {
     return { ok: false, status: 0, error: `Invalid environment URL: ${args.baseUrl}` };
@@ -130,13 +146,25 @@ async function handleApiRequest(args: ApiRequestArgs): Promise<ApiResponse> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), args.timeoutMs ?? DEFAULT_TIMEOUT_MS);
 
+  const envId = findEnvironmentIdByUrl(args.baseUrl);
+  const token = envId ? getSessionToken(envId) : null;
+
   try {
+    const headers: Record<string, string> = {};
+    if (args.body !== undefined) headers["Content-Type"] = "application/json";
+    if (token) headers["Authorization"] = `Bearer ${token.accessToken}`;
+
     const res = await fetch(joinUrl(args.baseUrl, args.path), {
       method: args.method ?? "GET",
-      headers: args.body !== undefined ? { "Content-Type": "application/json" } : undefined,
+      headers,
       body: args.body !== undefined ? JSON.stringify(args.body) : undefined,
       signal: controller.signal,
     });
+
+    if (res.status === 401 && envId) {
+      removeSessionToken(envId);
+      setEnvironmentAuthState(envId, "blocked");
+    }
 
     const text = await res.text();
     let parsed: unknown = text;
@@ -184,10 +212,16 @@ async function handleStreamSubscribe(
     }
   };
 
+  const envId = findEnvironmentIdByUrl(args.baseUrl);
+  const token = envId ? getSessionToken(envId) : null;
+
+  const streamHeaders: Record<string, string> = { Accept: "text/event-stream" };
+  if (token) streamHeaders["Authorization"] = `Bearer ${token.accessToken}`;
+
   try {
     const res = await fetch(joinUrl(args.baseUrl, args.path), {
       signal: controller.signal,
-      headers: { Accept: "text/event-stream" },
+      headers: streamHeaders,
     });
     if (!res.ok || !res.body) {
       send("error", `HTTP ${res.status}`);
@@ -369,6 +403,20 @@ app.whenReady().then(() => {
     if (activeUrl) getOrCreateSupervisor(env.id, activeUrl);
     syncEndpointTracker(env.id);
     return env;
+  });
+  ipcMain.handle("config:exchangePairingCode", async (_event, baseUrl: string, code: string, scope?: string) => {
+    const sessionScope = (scope as SessionScope) ?? "read-only";
+    const result = await exchangePairingCode(baseUrl, code, sessionScope);
+    if (result.ok && result.token) {
+      const envId = findEnvironmentIdByUrl(baseUrl);
+      if (envId) {
+        storeSessionToken(envId, result.token);
+      }
+    }
+    return result;
+  });
+  ipcMain.handle("config:removeSessionToken", (_event, environmentId: string) => {
+    removeSessionToken(environmentId);
   });
   ipcMain.handle("config:removeEnvironment", (_event, id: string) => {
     removeSupervisor(id);

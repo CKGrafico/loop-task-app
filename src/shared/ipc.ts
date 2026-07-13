@@ -30,6 +30,22 @@ export interface StreamEventPayload {
   text: string;
 }
 
+// ── Pairing & scoped sessions ──────────────────────────────────────
+
+export type SessionScope = "read-only" | "operate" | "admin";
+
+export interface SessionToken {
+  accessToken: string;
+  scope: SessionScope;
+  expiresAt: number | null;
+}
+
+export interface PairingCodeExchangeResponse {
+  ok: boolean;
+  token?: SessionToken;
+  error?: string;
+}
+
 // ── Config store (electron-store) ───────────────────────────────────
 
 export type EndpointKind = "direct" | "ssh" | "tailscale";
@@ -42,11 +58,14 @@ export interface AccessEndpoint {
   failureCount: number;
 }
 
+export type EnvironmentAuthState = "unauthenticated" | "paired" | "blocked" | "unknown";
+
 export interface Environment {
   id: string;
   name: string;
   endpoints: AccessEndpoint[];
   activeEndpointId: string | null;
+  authState?: EnvironmentAuthState;
 }
 
 export interface ConfigBridge {
@@ -59,6 +78,8 @@ export interface ConfigBridge {
   getSelectedEnvironmentId: () => Promise<string | null>;
   setSelectedEnvironmentId: (id: string | null) => Promise<void>;
   migrateFromLocalStorage: (rawInstances: string, rawSelectedId: string | null) => Promise<boolean>;
+  exchangePairingCode: (baseUrl: string, code: string, scope?: SessionScope) => Promise<PairingCodeExchangeResponse>;
+  removeSessionToken: (environmentId: string) => Promise<void>;
 }
 
 // ── Connection supervisor ─────────────────────────────────────────────

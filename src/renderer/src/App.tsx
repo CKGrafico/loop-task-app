@@ -44,6 +44,7 @@ export function App(): React.ReactNode {
   const [view, setView] = useState<View>({ kind: "list" });
   const [filter, setFilter] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
+  const [repairEnvironmentId, setRepairEnvironmentId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [health, setHealth] = useState<Record<string, EnvironmentHealth>>({});
   const [connectionStatus, setConnectionStatus] = useState<Record<string, ConnectionStatus>>({});
@@ -216,6 +217,11 @@ export function App(): React.ReactNode {
     setActiveEndpoint(environmentId, endpointId);
   };
 
+  const handleRepair = (id: string): void => {
+    setRepairEnvironmentId(id);
+    setModalOpen(true);
+  };
+
   const openLoop = (loopId: string): void => setView({ kind: "loop", loopId });
   const goBack = (): void => setView({ kind: "list" });
 
@@ -274,6 +280,7 @@ export function App(): React.ReactNode {
               onRemove={handleRemove}
               onRetry={handleRetry}
               onSetEndpoint={handleSetEndpoint}
+              onRepair={handleRepair}
             />
           </aside>
         ) : null}
@@ -369,7 +376,11 @@ export function App(): React.ReactNode {
       </div>
 
       {modalOpen ? (
-        <AddEnvironmentModal onSubmit={handleAdd} onCancel={() => setModalOpen(false)} />
+        <AddEnvironmentModal
+          onSubmit={handleAdd}
+          onCancel={() => { setModalOpen(false); setRepairEnvironmentId(null); }}
+          repairEnvironmentId={repairEnvironmentId}
+        />
       ) : null}
     </div>
   );

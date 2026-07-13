@@ -1,6 +1,6 @@
-import type { EndpointKind, TailscalePeer, TailscalePeersResponse } from "../../shared/ipc";
+import type { EndpointKind, TailscalePeer, TailscalePeersResponse, EnvironmentAuthState, SessionScope, PairingCodeExchangeResponse } from "../../shared/ipc";
 
-export type { EndpointKind, TailscalePeer, TailscalePeersResponse };
+export type { EndpointKind, TailscalePeer, TailscalePeersResponse, EnvironmentAuthState, SessionScope, PairingCodeExchangeResponse };
 
 export type LoopStatus = "running" | "waiting" | "paused" | "idle" | "stopped";
 
@@ -70,6 +70,7 @@ export interface Environment {
   name: string;
   endpoints: AccessEndpoint[];
   activeEndpointId: string | null;
+  authState?: EnvironmentAuthState;
 }
 
 export type EnvironmentHealth = "unknown" | "ok" | "offline" | "connecting" | "backoff" | "blocked";

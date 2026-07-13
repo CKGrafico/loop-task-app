@@ -22,6 +22,7 @@ export function useEnvironments(): {
   addEndpoint: (environmentId: string, url: string, kind: "direct" | "ssh" | "tailscale") => void;
   removeEndpoint: (environmentId: string, endpointId: string) => void;
   setActiveEndpoint: (environmentId: string, endpointId: string) => void;
+  removeSessionToken: (environmentId: string) => void;
 } {
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -232,6 +233,17 @@ export function useEnvironments(): {
     [],
   );
 
+  const removeSessionTokenFn = useCallback(
+    (environmentId: string) => {
+      if (window.api) {
+        void window.api.config.removeSessionToken(environmentId).then(async () => {
+          setEnvironments(await window.api.config.getEnvironments());
+        });
+      }
+    },
+    [],
+  );
+
   if (!loaded) {
     return {
       environments: [],
@@ -242,6 +254,7 @@ export function useEnvironments(): {
       addEndpoint: addEndpointFn,
       removeEndpoint: removeEndpointFn,
       setActiveEndpoint: setActiveEndpointFn,
+      removeSessionToken: removeSessionTokenFn,
     };
   }
 
@@ -254,5 +267,6 @@ export function useEnvironments(): {
     addEndpoint: addEndpointFn,
     removeEndpoint: removeEndpointFn,
     setActiveEndpoint: setActiveEndpointFn,
+    removeSessionToken: removeSessionTokenFn,
   };
 }

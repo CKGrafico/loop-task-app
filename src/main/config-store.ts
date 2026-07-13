@@ -1,6 +1,6 @@
 import Store from "electron-store";
 import { safeStorage } from "electron";
-import type { AccessEndpoint, EndpointKind, Environment } from "../shared/ipc.js";
+import type { AccessEndpoint, EndpointKind, Environment, SessionScope, SessionToken, PairingCodeExchangeResponse, EnvironmentAuthState } from "../shared/ipc.js";
 
 interface LegacyInstance {
   id: string;
@@ -10,6 +10,13 @@ interface LegacyInstance {
 
 interface EnvironmentWithFingerprint extends Environment {
   fingerprintId?: string;
+  authState?: EnvironmentAuthState;
+}
+
+interface EncryptedSessionToken {
+  encryptedAccessToken: string;
+  scope: SessionScope;
+  expiresAt: number | null;
 }
 
 interface ConfigSchema {
@@ -18,6 +25,7 @@ interface ConfigSchema {
   instances: LegacyInstance[];
   selectedInstanceId: string | null;
   instancesMigrated: boolean;
+  sessionTokens: Record<string, EncryptedSessionToken>;
   [key: string]: unknown;
 }
 
@@ -28,6 +36,7 @@ const store = new Store<ConfigSchema>({
     instances: [],
     selectedInstanceId: null,
     instancesMigrated: false,
+    sessionTokens: {},
   },
 });
 
@@ -200,6 +209,100 @@ export function updateEndpointHealth(environmentId: string, endpointId: string, 
   ep.lastError = lastError;
   ep.failureCount = failureCount;
   store.set("environments", envs);
+}
+
+export function setEnvironmentAuthState(environmentId: string, authState: EnvironmentAuthState): void {
+  const envs = store.get("environments", []);
+  const env = envs.find((e) => e.id === environmentId);
+  if (!env) return;
+  env.authState = authState;
+  store.set("environments", envs);
+}
+
+export function storeSessionToken(environmentId: string, token: SessionToken): boolean {
+  const encrypted = encryptValue(token.accessToken);
+  if (!encrypted) return false;
+  const tokens = store.get("sessionTokens", {});
+  tokens[environmentId] = {
+    encryptedAccessToken: encrypted,
+    scope: token.scope,
+    expiresAt: token.expiresAt,
+  };
+  store.set("sessionTokens", tokens);
+  setEnvironmentAuthState(environmentId, "paired");
+  return true;
+}
+
+export function getSessionToken(environmentId: string): SessionToken | null {
+  const tokens = store.get("sessionTokens", {});
+  const entry = tokens[environmentId];
+  if (!entry) return null;
+  const accessToken = decryptValue(entry.encryptedAccessToken);
+  if (!accessToken) return null;
+  const token: SessionToken = {
+    accessToken,
+    scope: entry.scope,
+    expiresAt: entry.expiresAt,
+  };
+  if (token.expiresAt !== null && Date.now() > token.expiresAt) {
+    removeSessionToken(environmentId);
+    setEnvironmentAuthState(environmentId, "blocked");
+    return null;
+  }
+  return token;
+}
+
+export function removeSessionToken(environmentId: string): void {
+  const tokens = store.get("sessionTokens", {});
+  delete tokens[environmentId];
+  store.set("sessionTokens", tokens);
+}
+
+export async function exchangePairingCode(
+  baseUrl: string,
+  code: string,
+  scope: SessionScope = "read-only",
+): Promise<PairingCodeExchangeResponse> {
+  try {
+    const url = `${baseUrl.replace(/\/+$/, "")}/api/pair/exchange`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, scope }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      let errorMsg = `HTTP ${res.status}`;
+      try {
+        const parsed = JSON.parse(body) as { error?: { message?: string } };
+        if (parsed.error?.message) errorMsg = parsed.error.message;
+      } catch { /* use default */ }
+      return { ok: false, error: errorMsg };
+    }
+
+    const data = await res.json() as unknown;
+    if (typeof data !== "object" || data === null || !("accessToken" in data)) {
+      return { ok: false, error: "Invalid pairing response from daemon" };
+    }
+
+    const response = data as { accessToken: string; scope?: SessionScope; expiresAt?: number | null };
+    const token: SessionToken = {
+      accessToken: response.accessToken,
+      scope: response.scope ?? scope,
+      expiresAt: response.expiresAt ?? null,
+    };
+    return { ok: true, token };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: message };
+  }
 }
 
 export function encryptValue(plaintext: string): string | null {

@@ -7,6 +7,8 @@ import type {
   StreamEventPayload,
   TailscalePeersResponse,
   LoopTaskBridge,
+  PairingCodeExchangeResponse,
+  SessionScope,
 } from "../shared/ipc.js";
 
 const bridge: LoopTaskBridge = {
@@ -44,6 +46,10 @@ const bridge: LoopTaskBridge = {
       ipcRenderer.invoke("config:setSelectedEnvironmentId", id),
     migrateFromLocalStorage: (rawInstances: string, rawSelectedId: string | null) =>
       ipcRenderer.invoke("config:migrateFromLocalStorage", rawInstances, rawSelectedId),
+    exchangePairingCode: (baseUrl: string, code: string, scope?: SessionScope) =>
+      ipcRenderer.invoke("config:exchangePairingCode", baseUrl, code, scope) as Promise<PairingCodeExchangeResponse>,
+    removeSessionToken: (environmentId: string) =>
+      ipcRenderer.invoke("config:removeSessionToken", environmentId),
   },
 
   connection: {
