@@ -19,12 +19,46 @@ export interface ChatMessage {
   finishedAt?: boolean;
 }
 
+export type AccessMode = "supervised" | "full";
+
+export type ApprovalDecision = "approve-once" | "approve-always" | "decline" | "cancel";
+
+export interface ApprovalRequest {
+  id: string;
+  turnId: string;
+  command?: string;
+  filePath?: string;
+  description: string;
+  resolved: boolean;
+  decision?: ApprovalDecision;
+}
+
+export interface QuestionOption {
+  key: string;
+  label: string;
+}
+
+export interface QuestionRequest {
+  id: string;
+  turnId: string;
+  text: string;
+  options: QuestionOption[];
+  singleChoice: boolean;
+  allowFreeText: boolean;
+  resolved: boolean;
+  answer?: string;
+}
+
 export interface ChatTurn {
   id: string;
   userMessage: ChatMessage;
   assistantMessage: ChatMessage;
   finished: boolean;
   collapsed: boolean;
+  accessMode: AccessMode;
+  approval?: ApprovalRequest;
+  question?: QuestionRequest;
+  interrupted?: boolean;
 }
 
 export type RowKind =
@@ -32,7 +66,9 @@ export type RowKind =
   | "assistant-message"
   | "tool-call"
   | "tool-calls-expander"
-  | "turn-fold";
+  | "turn-fold"
+  | "approval-request"
+  | "question-request";
 
 export interface BaseRow {
   id: string;
@@ -68,9 +104,21 @@ export interface TurnFoldRow extends BaseRow {
   durationSec: number;
 }
 
+export interface ApprovalRow extends BaseRow {
+  kind: "approval-request";
+  approval: ApprovalRequest;
+}
+
+export interface QuestionRow extends BaseRow {
+  kind: "question-request";
+  question: QuestionRequest;
+}
+
 export type TranscriptRow =
   | UserMessageRow
   | AssistantMessageRow
   | ToolCallRow
   | ToolCallsExpanderRow
-  | TurnFoldRow;
+  | TurnFoldRow
+  | ApprovalRow
+  | QuestionRow;

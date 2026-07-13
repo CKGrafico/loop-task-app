@@ -101,6 +101,7 @@ export function generateMockSession(turnCount: number, toolCallsPerTurn: number)
       },
       finished: i < turnCount - 1,
       collapsed: false,
+      accessMode: i % 3 === 0 ? "supervised" : "full",
     });
 
     t = assistantEnd + Math.floor(Math.random() * 5000 + 1000);
@@ -129,5 +130,6 @@ export function generateStreamingTurn(): ChatTurn {
     },
     finished: false,
     collapsed: false,
+    accessMode: "supervised",
   };
 }

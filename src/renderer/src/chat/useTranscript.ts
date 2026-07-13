@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import type { ChatTurn, TranscriptRow, ToolCall, ToolCallRow, ToolCallsExpanderRow, TurnFoldRow } from "./types";
+import type { AccessMode, ApprovalDecision, ChatTurn, TranscriptRow, ToolCall, ToolCallRow, ToolCallsExpanderRow, TurnFoldRow, ApprovalRow, QuestionRow } from "./types";
 
 const TOOL_CALLS_THRESHOLD = 3;
 
@@ -13,6 +13,24 @@ function buildRowsFromTurns(turns: ChatTurn[]): TranscriptRow[] {
       turnId: turn.id,
       content: turn.userMessage.content,
     });
+
+    if (turn.approval && !turn.approval.resolved) {
+      rows.push({
+        id: `approval-${turn.id}`,
+        kind: "approval-request",
+        turnId: turn.id,
+        approval: turn.approval,
+      } as ApprovalRow);
+    }
+
+    if (turn.question && !turn.question.resolved) {
+      rows.push({
+        id: `question-${turn.id}`,
+        kind: "question-request",
+        turnId: turn.id,
+        question: turn.question,
+      } as QuestionRow);
+    }
 
     const tools = turn.assistantMessage.toolCalls ?? [];
 
@@ -201,6 +219,75 @@ export function useTranscript() {
     [rebuildRows],
   );
 
+  const interruptTurn = useCallback(
+    (turnId: string) => {
+      setTurns((prev) => {
+        const next = prev.map((t) => {
+          if (t.id !== turnId) return t;
+          return {
+            ...t,
+            finished: true,
+            interrupted: true,
+            assistantMessage: {
+              ...t.assistantMessage,
+              finishedAt: Date.now(),
+            },
+          };
+        });
+        rebuildRows(next);
+        return next;
+      });
+    },
+    [rebuildRows],
+  );
+
+  const resolveApproval = useCallback(
+    (turnId: string, decision: ApprovalDecision) => {
+      setTurns((prev) => {
+        const next = prev.map((t) => {
+          if (t.id !== turnId || !t.approval) return t;
+          return {
+            ...t,
+            approval: { ...t.approval, resolved: true, decision },
+          };
+        });
+        rebuildRows(next);
+        return next;
+      });
+    },
+    [rebuildRows],
+  );
+
+  const answerQuestion = useCallback(
+    (turnId: string, answer: string) => {
+      setTurns((prev) => {
+        const next = prev.map((t) => {
+          if (t.id !== turnId || !t.question) return t;
+          return {
+            ...t,
+            question: { ...t.question, resolved: true, answer },
+          };
+        });
+        rebuildRows(next);
+        return next;
+      });
+    },
+    [rebuildRows],
+  );
+
+  const setTurnAccessMode = useCallback(
+    (turnId: string, mode: AccessMode) => {
+      setTurns((prev) => {
+        const next = prev.map((t) =>
+          t.id === turnId ? { ...t, accessMode: mode } : t,
+        );
+        rebuildRows(next);
+        return next;
+      });
+    },
+    [rebuildRows],
+  );
+
   return {
     turns,
     rows,
@@ -212,5 +299,9 @@ export function useTranscript() {
     updateTurn,
     appendAssistantContent,
     finishTurn,
+    interruptTurn,
+    resolveApproval,
+    answerQuestion,
+    setTurnAccessMode,
   };
 }

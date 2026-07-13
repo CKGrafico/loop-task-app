@@ -1,18 +1,22 @@
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type { TranscriptRow, ChatTurn } from "./types";
+import type { AccessMode, ApprovalDecision, ChatTurn, TranscriptRow } from "./types";
 import { useTranscript } from "./useTranscript";
-import { useAutoScroll } from "./useAutoScroll";
 import { MarkdownContent, ToolCallRowView } from "./MarkdownContent";
+import { ApprovalPanel } from "./ApprovalPanel";
+import { QuestionPanel } from "./QuestionPanel";
+import { ChatComposer } from "./ChatComposer";
 import { Icon } from "../components/Icon";
+
+interface TranscriptViewProps {
+  initialTurns: ChatTurn[];
+  streamingTurn?: ChatTurn;
+}
 
 export function TranscriptView({
   initialTurns,
   streamingTurn,
-}: {
-  initialTurns: ChatTurn[];
-  streamingTurn?: ChatTurn;
-}) {
+}: TranscriptViewProps) {
   const {
     turns,
     rows,
@@ -23,11 +27,18 @@ export function TranscriptView({
     addTurn,
     appendAssistantContent,
     finishTurn,
+    interruptTurn,
+    resolveApproval,
+    answerQuestion,
+    setTurnAccessMode,
   } = useTranscript();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
-  const [showJump, setShowJump] = React.useState(false);
+  const [showJump, setShowJump] = useState(false);
+  const [accessMode, setAccessMode] = useState<AccessMode>("supervised");
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
 
   const onScroll = useCallback(() => {
     const el = scrollRef.current;
@@ -77,6 +88,7 @@ export function TranscriptView({
   useEffect(() => {
     if (!streamingTurn) return;
     addTurn(streamingTurn);
+    setActiveTurnId(streamingTurn.id);
 
     const content = streamingContentRef.current;
     let idx = 0;
@@ -88,6 +100,7 @@ export function TranscriptView({
       if (idx >= content.length) {
         clearInterval(interval);
         finishTurn(streamingTurn.id);
+        setActiveTurnId(null);
       }
     }, 30);
 
@@ -117,6 +130,10 @@ export function TranscriptView({
           return 36;
         case "turn-fold":
           return 40;
+        case "approval-request":
+          return 120;
+        case "question-request":
+          return 100;
         default:
           return 40;
       }
@@ -137,6 +154,92 @@ export function TranscriptView({
       setTimeout(() => virtualizer.measure(), 0);
     },
     [toggleToolExpand, virtualizer],
+  );
+
+  const handleSendPrompt = useCallback(
+    (text: string) => {
+      const now = Date.now();
+      const turnId = `turn-${now}`;
+      const turn: ChatTurn = {
+        id: turnId,
+        userMessage: {
+          id: `msg-${now}-u`,
+          role: "user",
+          content: text,
+          startedAt: now,
+        },
+        assistantMessage: {
+          id: `msg-${now}-a`,
+          role: "assistant",
+          content: "",
+          toolCalls: [],
+          startedAt: now + 100,
+          finishedAt: undefined,
+        },
+        finished: false,
+        collapsed: false,
+        accessMode,
+      };
+      addTurn(turn);
+      setActiveTurnId(turnId);
+
+      const responseText = "Processing your request. I'll analyze the codebase and implement the changes as needed.\n\nLet me start by exploring the relevant files.";
+      let idx = 0;
+      const interval = setInterval(() => {
+        const chunkSize = Math.floor(Math.random() * 8) + 3;
+        const chunk = responseText.slice(idx, idx + chunkSize);
+        idx += chunkSize;
+        appendAssistantContent(turnId, chunk);
+        if (idx >= responseText.length) {
+          clearInterval(interval);
+          finishTurn(turnId);
+          setActiveTurnId(null);
+        }
+      }, 40);
+    },
+    [accessMode, addTurn, appendAssistantContent, finishTurn],
+  );
+
+  const handleInterrupt = useCallback(
+    (turnId: string) => {
+      interruptTurn(turnId);
+      setActiveTurnId(null);
+    },
+    [interruptTurn],
+  );
+
+  const handleResolveApproval = useCallback(
+    (approvalId: string, decision: ApprovalDecision) => {
+      if (!activeTurnId) return;
+      resolveApproval(activeTurnId, decision);
+    },
+    [activeTurnId, resolveApproval],
+  );
+
+  const handleAnswerQuestion = useCallback(
+    (questionId: string, answer: string) => {
+      if (!activeTurnId) return;
+      answerQuestion(activeTurnId, answer);
+    },
+    [activeTurnId, answerQuestion],
+  );
+
+  const handleAccessModeChange = useCallback(
+    (mode: AccessMode) => {
+      setAccessMode(mode);
+      if (activeTurnId) {
+        setTurnAccessMode(activeTurnId, mode);
+      }
+    },
+    [activeTurnId, setTurnAccessMode],
+  );
+
+  const handleDraftChange = useCallback(
+    (turnId: string | null, text: string) => {
+      const key = turnId ?? "__new";
+      setDrafts((prev) => ({ ...prev, [key]: text }));
+    },
+    [],
   );
 
   const renderRow = useCallback(
@@ -195,9 +298,25 @@ export function TranscriptView({
               s · {row.toolCallCount} tool calls
             </button>
           );
+
+        case "approval-request":
+          return (
+            <ApprovalPanel
+              approval={row.approval}
+              onDecision={handleResolveApproval}
+            />
+          );
+
+        case "question-request":
+          return (
+            <QuestionPanel
+              question={row.question}
+              onAnswer={handleAnswerQuestion}
+            />
+          );
       }
     },
-    [handleToggleCollapse, handleToggleTool],
+    [handleToggleCollapse, handleToggleTool, handleResolveApproval, handleAnswerQuestion],
   );
 
   return (
@@ -254,6 +373,19 @@ export function TranscriptView({
           <Icon name="arrowUp" size={13} /> Jump to latest
         </button>
       )}
+
+      <ChatComposer
+        turns={turns}
+        activeTurnId={activeTurnId}
+        onSendPrompt={handleSendPrompt}
+        onInterrupt={handleInterrupt}
+        onResolveApproval={handleResolveApproval}
+        onAnswerQuestion={handleAnswerQuestion}
+        accessMode={accessMode}
+        onAccessModeChange={handleAccessModeChange}
+        drafts={drafts}
+        onDraftChange={handleDraftChange}
+      />
     </div>
   );
 }
