@@ -453,11 +453,28 @@ export function App(): React.ReactNode {
               {/* Left group: name · IP · status dots */}
               <span className="main-title">{selected.name}</span>
 
-              {activeEndpoint ? (
-                <span className="chip mono" title={activeEndpoint.url}>
-                  {activeEndpoint.sshTarget ?? hostLabel(activeEndpoint.url)}
-                </span>
-              ) : null}
+              {activeEndpoint ? (() => {
+                // For SSH endpoints: show the real host from sshTarget (strip user@ prefix).
+                // For direct/tailscale: show the URL host — that IS the real IP.
+                // Never show 127.0.0.1 (tunnel localhost — not meaningful to the user).
+                let label: string | null = null;
+                if (activeEndpoint.sshTarget) {
+                  // "user@host:port" or "user@host" → extract just the host part
+                  const m = /^[^@]+@([^:]+)(?::\d+)?$/.exec(activeEndpoint.sshTarget);
+                  label = m ? m[1] : activeEndpoint.sshTarget;
+                } else {
+                  const h = hostLabel(activeEndpoint.url);
+                  // suppress tunnel localhost — meaningless to display
+                  if (!h.startsWith("127.0.0.1") && !h.startsWith("localhost")) {
+                    label = h;
+                  }
+                }
+                return label ? (
+                  <span className="chip mono" title={activeEndpoint.sshTarget ?? activeEndpoint.url}>
+                    {label}
+                  </span>
+                ) : null;
+              })() : null}
 
               {/* Daemon connection dot */}
               {(() => {
