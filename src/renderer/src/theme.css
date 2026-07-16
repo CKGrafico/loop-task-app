@@ -151,6 +151,9 @@ input {
 }
 
 .titlebar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   color: var(--text-secondary);
   font-weight: 600;
   font-size: 13px;

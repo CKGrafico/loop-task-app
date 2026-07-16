@@ -6,6 +6,7 @@ import type { FleetItemStatus } from "./fleet-status";
 import { rollUpEnvironmentStatus, isNotifiableStatus, getPillLabel } from "./fleet-status";
 import { loopStatusToFleetItem } from "./fleet-mapping";
 import { useEnvironments } from "./store";
+import { OrbionMark } from "./components/OrbionMark";
 import { fetchLoops, isMock } from "./api";
 import { useUnreadTracker } from "./use-unread-tracker";
 import { createNotificationBridge } from "./use-notifications";
@@ -387,7 +388,10 @@ export function App(): React.ReactNode {
         >
           <ArrowLeft size={15} />
         </button>
-        <span className="titlebar-brand">{intl.formatMessage({ id: "app.brand" })}</span>
+        <span className="titlebar-brand">
+          <OrbionMark size={16} />
+          {intl.formatMessage({ id: "app.brand" })}
+        </span>
         <span className="titlebar-tag">{isMock ? intl.formatMessage({ id: "app.mock" }) : intl.formatMessage({ id: "app.preview" })}</span>
       </div>
 

@@ -1,0 +1,83 @@
+---
+title: How Orbion Talks to Your Machines
+description: The process model, the security boundary, and why remote daemons need a tunnel.
+---
+
+Orbion is an Electron app that watches loop-task daemons on your machines. Every design choice on this page follows from one rule: the renderer never touches the network, and the daemon never listens on a public interface.
+
+## The three-process model
+
+Orbion splits work across the three standard Electron processes:
+
+- **Renderer**: a sandboxed React 19 UI. It has no Node integration and no direct network access. It cannot call `fetch` against your daemons.
+- **Preload bridge**: a typed IPC contract (defined in `src/shared/ipc.ts`). It exposes a narrow API surface to the renderer: request, subscribe to a stream, read config.
+- **Main process**: owns every HTTP request and every SSE stream. Connection supervisors, the Add VM wizard, and the config store all live here.
+
+Two reasons all HTTP lives in the main process:
+
+1. The loop-task daemon sends no CORS headers, so a renderer `fetch` would be blocked by the browser engine anyway.
+2. Main-process `fetch` works the same whether the daemon runs on `127.0.0.1` or on a VM at the end of a tunnel. The renderer never needs to know where an Environment physically is.
+
+```
++----------------------------------------------------------+
+| Orbion (Electron)                                         |
+|                                                           |
+|   Renderer (React 19, sandboxed: no Node, no network)     |
+|        |                                                  |
+|        v  typed preload bridge (IPC)                      |
+|   Main process (owns all HTTP and SSE)                    |
++--------|--------------------------------------------------+
+         |
+         |  HTTP + SSE
+         |
+         +--> Direct:    http://127.0.0.1:8845  (this machine)
+         |
+         +--> SSH:       local forward ---> remote 127.0.0.1:8845
+         |                                  (daemon on a remote VM)
+         |
+         +--> Tailscale: tailnet address --> daemon on a remote VM
+```
+
+The three arrows at the bottom are the three endpoint kinds you see on an Environment in the sidebar: Direct, SSH, and Tailscale.
+
+## Why the daemon only listens on loopback
+
+The loop-task daemon (version 2.1 or later) binds its HTTP API to `127.0.0.1:8845` by design. Swagger lives at `/api/docs` on the same address. Nothing is exposed to the network by default, so a fresh VM running the daemon has no new attack surface: only processes on that machine can reach the API.
+
+To reach a daemon on a remote VM, you bring the connection to it instead of opening the daemon up:
+
+- **SSH**: a local port forward to the VM's `127.0.0.1:8845`. The Add VM wizard opens this tunnel for you during its "Opening tunnel" step.
+- **Tailscale**: your tailnet acts as the private network, and the Environment's endpoint uses the machine's tailnet address.
+
+<Callout type="info">
+Loopback-only binding is the security boundary, not a limitation. Authentication and encryption are delegated to SSH or Tailscale, which already do them well, instead of being reimplemented inside the daemon.
+</Callout>
+
+Never expose the daemon port to the public internet. The [Add a remote VM](./add-a-remote-vm) guide covers both paths end to end.
+
+## Polling and push
+
+Orbion uses two transport styles, matched to the data:
+
+- **Loop lists poll every 5 seconds.** The main process issues a GET to each Environment's daemon and the renderer re-renders from the result.
+- **Logs are true push.** When you open a loop's logs, the main process holds an SSE stream from the daemon and forwards each event over the preload bridge as it arrives.
+
+Polling loop lists keeps the daemon simple and makes recovery trivial: a missed cycle costs at most 5 seconds of staleness, and the next GET heals it. Logs are the one place where latency matters enough to justify a persistent stream, so they get one. A single hybrid gives you fresh logs without a fleet of long-lived connections per Environment.
+
+## Connection supervision
+
+Every endpoint on an Environment gets its own connection supervisor in the main process. Each supervisor probes its endpoint independently and reports one of five phases: offline, connecting, connected, backoff, or blocked.
+
+On a transient failure (timeout, HTTP 5xx), the supervisor retries with exponential backoff: 1 second, doubling to a cap of 16 seconds. After 30 seconds of stable connection, the failure count resets. On a blocking failure (HTTP 401 or 403, or an invalid endpoint URL), the supervisor enters the blocked phase and stops retrying, because retrying an auth failure only produces the same result. You clear a blocked endpoint by fixing the cause (re-pair, correct the URL) and clicking "Retry connection" in the sidebar.
+
+The full phase list, what each one means, and how it renders in the UI are in the [Statuses reference](./statuses).
+
+## Where your data lives
+
+Your configuration (Environments, endpoints, session tokens, the main VM selection, OpenCode endpoints) persists locally through electron-store, in your platform's standard app-data directory. There is no cloud component: nothing leaves your machines except the HTTP calls you see, from the main process to your own daemons.
+
+## Read-only by design in v0.1
+
+In v0.1, Orbion issues only GET requests against the daemon API for loop, project, task, and log data. The write path is intentionally absent: Orbion observes loops. Use the loop-task CLI on the machine to create, pause, or trigger them. The daemon and its CLI remain the source of mutation; Orbion only displays what the daemon reports. This describes the current scope, not a commitment about future versions.
+
+The endpoints Orbion reads, and the rest of the daemon surface, are documented in the [Daemon API reference](./daemon-api). New to Orbion entirely? Start with the [Quickstart](./quickstart).

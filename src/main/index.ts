@@ -324,11 +324,12 @@ function createWindow(): void {
     minHeight: 600,
     show: false,
     title: "Orbion",
-    backgroundColor: "#262624",
+    icon: path.join(import.meta.dirname, "../../resources/icon.png"),
+    backgroundColor: "#0d141f",
     titleBarStyle: "hidden",
     titleBarOverlay: {
-      color: "#262624",
-      symbolColor: "#9b9891",
+      color: "#0d141f",
+      symbolColor: "#a4b1cd",
       height: 40,
     },
     webPreferences: {

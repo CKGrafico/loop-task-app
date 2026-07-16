@@ -1,0 +1,76 @@
+---
+title: Monitor Loops and Logs
+description: "Read loop status, inspect a loop's runs and command, and follow logs live."
+---
+
+Orbion reads loop state from the loop-task daemon on each Environment and shows it live. This page covers the loops list, loop statuses, the loop detail view, live logs, and the Projects view. If you have not connected an Environment yet, start with the [Quickstart](./quickstart).
+
+## The loops list
+
+You select an Environment in the sidebar and Orbion lists its loops. Each row shows:
+
+- A status dot and status label.
+- The loop's description, or its command line when no description is set.
+- A small colored dot for the loop's project.
+- The interval (for example `30m`), the run count, the last exit code when the last run failed, and a time column: how long ago the run started for a running loop, otherwise the countdown to the next run.
+
+Type in the "Filter loops…" box at the bottom to narrow the list by description, command, status, or loop id. Orbion polls the daemon every 5 seconds; the header shows when the list was last updated. Click Refresh now next to the filter box to fetch immediately.
+
+{/* screenshot: loops-list */}
+
+## Loop statuses
+
+- **running**: the command is executing right now.
+- **waiting**: the loop is between runs, with a next run scheduled.
+- **paused**: the schedule is suspended; the daemon starts no new runs until the loop is resumed.
+- **idle**: the loop has no run in progress and no next run scheduled.
+- **stopped**: the loop is stopped and does not run again until it is started.
+
+See [Statuses](./statuses) for the full table, including connection states and fleet status pills.
+
+## Loop detail
+
+You click a row to open the loop. The Overview card shows the loop id and these fields:
+
+| Field | Meaning |
+| --- | --- |
+| Interval | Time between runs, as the daemon reports it (for example `30m`). |
+| Next run | Countdown to the next scheduled run, or an empty placeholder when none is scheduled. |
+| Last run | How long ago the last run started. |
+| Last exit | Exit code of the last run. Nonzero codes render in red. |
+| Runs | Total run count, shown as `count / max` when the loop has a max runs limit. |
+| PID | Process id of the current run, empty when nothing is running. |
+| Working dir | Directory the command runs in on the Environment. |
+| Command | The full command line. |
+
+The detail view refreshes every 5 seconds, same as the list.
+
+{/* screenshot: loop-detail */}
+
+## Live logs
+
+The Logs card sits below the Overview. It loads the last 200 lines of the loop's log, then streams new lines from the daemon over SSE. While Follow is on, the pane autoscrolls to the newest line. Scrolling with the mouse wheel turns Follow off so you can read earlier output; click Follow to resume autoscroll. Click Copy to copy the buffer to the clipboard. The buffer keeps the most recent 2,000 lines; run headers and exit lines are highlighted.
+
+{/* screenshot: log-follow */}
+
+## Projects
+
+The Projects view lists the projects on the Environment. Projects group loops: each row shows the project's color, its name, its loop count, and its creation date. The built-in default project is labeled system. The filter box narrows projects by name.
+
+## Tasks
+
+Task definitions live on the daemon: a task is a reusable command, optionally chained so another task runs on success or on failure. Orbion does not display tasks yet.
+
+## Read-only in v0.1
+
+<Callout type="warn">
+Orbion observes loops: in v0.1 it issues only GET requests to the daemon for loop, project, task, and log data. You cannot create, pause, trigger, or edit a loop from Orbion. Use the loop-task CLI on the machine that runs the loop; see the [loop-task repository](https://github.com/CKGrafico/loop-task) for CLI syntax.
+</Callout>
+
+Everything on this page maps to GET endpoints on the daemon's HTTP API, so you can read the same data yourself on the machine:
+
+```bash
+curl http://127.0.0.1:8845/api/loops
+```
+
+The daemon binds to loopback only and serves interactive API docs at `http://127.0.0.1:8845/api/docs`.

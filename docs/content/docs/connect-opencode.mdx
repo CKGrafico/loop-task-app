@@ -1,0 +1,67 @@
+---
+title: Connect OpenCode on an Environment
+description: Get the per-environment OpenCode badge to green and fix authentication.
+---
+
+Each Environment can run an OpenCode server for coding agents on that machine. Orbion probes that server and reports the result as a badge in the sidebar. This page explains each badge state and how to fix it.
+
+## What the badge means
+
+Every Environment with a registered OpenCode endpoint shows a compact badge next to its name in the sidebar. The label tracks authentication: `oc:ok` (a provider is connected), `oc:auth` (login needed), `oc:?` (no result). Hover the badge to read the full status:
+
+| Tooltip | Meaning | Fix |
+| --- | --- | --- |
+| `OpenCode: connected` | The server responds and at least one provider is authenticated. | Nothing to do. |
+| `OpenCode: opencode auth login` | The server responds but no provider is connected. | [Fix authentication](#fix-authentication) |
+| `OpenCode: unreachable` | The probe cannot reach the server. | [Fix unreachable](#fix-unreachable) |
+| `OpenCode server version 0.9.0 is below minimum 1.0.0` | The server responds but is too old. | [Fix version too old](#fix-version-too-old) |
+| `Wrong password for OpenCode server` or `Access denied by OpenCode server` | The server rejected Orbion's credentials. | Check the endpoint password. |
+| `OpenCode: unknown` | Orbion has no probe result yet. | Wait for the next probe. |
+
+Orbion probes OpenCode from its main process when the app launches and when the Add VM wizard registers the endpoint. Each result is cached for 30 seconds.
+
+{/* screenshot: opencode-badges */}
+
+## Fix authentication
+
+When the badge reads `oc:auth`, the server runs but no model provider is connected. SSH into the VM and log in:
+
+```bash
+ssh ubuntu@my-vm
+opencode auth login
+```
+
+Pick a provider and complete the login flow. Orbion v0.1 has no re-check button for this badge: restart Orbion, which probes every OpenCode endpoint at launch. The badge turns to `oc:ok` once at least one provider is connected.
+
+## Fix unreachable
+
+`OpenCode: unreachable` means the OpenCode server is not running on the VM, or the SSH tunnel Orbion uses to reach it is closed. Two paths:
+
+- The [Add VM wizard](./add-a-remote-vm) handles this for you: it probes the VM, installs OpenCode when it is missing, starts it, and forwards a local port. Run it again against the same VM to repair the setup.
+- For manual setups, start the server yourself following the [OpenCode docs](https://opencode.ai/docs), then register its URL as the Environment's OpenCode endpoint.
+
+If the Environment itself shows offline in the sidebar, fix the daemon connection first (use Retry connection on the Environment row); the OpenCode probe travels the same SSH path.
+
+<Callout type="warn">
+Keep OpenCode servers on loopback or a private network such as Tailscale. Never expose your environments to the public internet.
+</Callout>
+
+## Fix version too old
+
+Orbion requires OpenCode server 1.0.0 or later. Older servers keep responding, but the badge tooltip shows the version message until you update. Update OpenCode on the VM and restart the server:
+
+```bash
+ssh ubuntu@my-vm
+opencode upgrade
+```
+
+If you installed OpenCode another way, follow the update steps in the [OpenCode docs](https://opencode.ai/docs).
+
+## OpenCode and the Infrastructure assistant
+
+These are two separate runtimes:
+
+- The per-environment OpenCode server, the one this badge tracks, runs coding agents on that specific machine.
+- The [Infrastructure assistant](./use-the-infra-assistant) runs on its own OpenCode runtime on the main VM and answers fleet questions such as machine status.
+
+A green badge on an Environment says nothing about the assistant, and the assistant keeps working while an Environment's badge is red. Fix each one where it lives.

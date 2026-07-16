@@ -1,5 +1,7 @@
 # AGENTS.md
 
+<!-- OB-NOT-INITIALIZED -->
+
 This file provides guidance to AI agents when working in this repository.
 
 *Agent-agnostic, works with OpenCode, Claude Code, Codex, Gemini, etc.*
@@ -31,12 +33,6 @@ Trigger patterns, I recognize ALL of these, exact wording does not matter:
 Inspect `.opencode/agents/*.md` before spawning. Prefer the most specialized custom engineer. **Never assign `fullstack-engineer` to a task** — it is `mode: primary` (the user's planning agent), not a spawned worker. If no specialist matches, tell the user to create one with `/make-engineer`. Never spawn engineers not present in that directory.
 
 **Full wave protocol, pipeline phases, and concurrency limits:** see `/plan-apply` (authoritative). Max concurrent agents is `agents.maxConcurrent` in `.opencode/opencode-onboard.json`.
-
-**Available engineers:**
-| `{persona}-engineer` | .opencode/agents/{persona}-engineer.md | Role |
-|---|---|---|
-| `frontend-engineer` | .opencode/agents/frontend-engineer.md | Electron + React 19 renderer, preload, shared IPC, UI components, styling, i18n |
-| `docs-ui-engineer` | .opencode/agents/docs-ui-engineer.md | docs/ website — HTML/CSS/JS landing page, Fumadocs MDX docs, design taste, copy, i18n |
 
 ## Skills
 

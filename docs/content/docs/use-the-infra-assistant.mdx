@@ -1,0 +1,66 @@
+---
+title: Use the Infrastructure Assistant
+description: "Run fleet operations in chat from your main VM: machine status, repo clones, approvals."
+---
+
+## What the main VM is
+
+The first Environment you add becomes the main VM. The sidebar tags it with a **main** badge. The main VM hosts a separate OpenCode runtime that powers the Infrastructure assistant, independent from the OpenCode server each Environment uses for coding chats. You add Environments with the Add VM wizard: see [Add a Remote VM](./add-a-remote-vm).
+
+To change the main VM, remove the current one. If other Environments remain, Orbion opens the **Pick a new main VM** dialog: the Infrastructure assistant needs a main VM to run on, so you choose one of your Environments or press **Skip** to disable the assistant. Environments without an active endpoint are listed with a **no endpoint** tag and cannot host the assistant. If you skip, the chat panel disappears from the sidebar until you set a main VM again.
+
+## Open the chat
+
+The chat lives in the sidebar, below the Environments list, in the panel titled **Infrastructure** with the main VM name next to it. Type in the composer (**Send a prompt…**) and press Enter.
+
+Today the assistant does exactly two things, the same two its help text lists:
+
+- **machine-status**: get the health of all VMs.
+- **clone repo**: clone a git repository on a VM. Include the full repository URL in your message. Without a target VM, the clone runs on the main VM.
+
+```text
+machine status
+clone repo https://github.com/CKGrafico/orbion
+```
+
+Any other prompt gets the help text back.
+
+{/* screenshot: infra-chat */}
+
+## Supervised vs Full access
+
+The composer has an access toggle with two modes:
+
+- **Supervised**: the agent asks before commands and file changes.
+- **Full access**: the agent runs without prompts.
+
+Keep **Supervised** on unless you are watching the transcript and trust every action the agent might take.
+
+## Approvals
+
+In Supervised mode, an **Approval required** panel appears in the chat whenever the agent wants to run a command or change a file. You have four choices:
+
+- **Approve once**: run this action one time. The agent asks again next time.
+- **Always allow**: run this action now and skip further prompts for it during the current session. The allowance does not persist: a new session starts with prompts on again.
+- **Decline**: reject this action. The turn continues and the agent picks another approach.
+- **Cancel turn**: reject the action and stop the whole turn.
+
+{/* screenshot: approval-panel */}
+
+## Agent questions
+
+When the agent needs input instead of permission, it shows numbered options with a **Press 1**, **Press 2** hint on each. Press the number key to pick one, or type a free-form reply in the **Or type your answer…** field and press **Send**.
+
+## Fleet status pills
+
+Every Environment row in the sidebar carries a pill showing its most urgent item state. Priority runs from most to least urgent: **approval**, **input**, **failed**, **working**, **done**, **idle**. An Environment with one item waiting on approval and five items working shows **approval**.
+
+Around the pills:
+
+- **Unread dots**: a dot appears on an Environment row when work finished there since you last viewed it. Opening the Environment clears the dot.
+- **OS notifications**: when an Environment enters an **approval**, **input**, or **failed** state, Orbion sends a desktop notification ("my-vm loop needs attention"). Clicking it focuses the item.
+- **Per-Environment mute**: the bell icon on each Environment row toggles **Mute notifications** and **Unmute notifications**. Muted Environments keep their pills and unread dots but send no desktop notifications.
+
+<Callout type="info">
+The assistant needs the main VM connected and its OpenCode runtime reachable. If the chat answers "Unable to reach the infrastructure runtime. Check that the main VM is connected.", check the main VM connection first: see [Troubleshooting](./troubleshooting).
+</Callout>

@@ -1,0 +1,68 @@
+---
+title: Add a Remote VM
+description: "Bootstrap a fresh VM over SSH: Orbion probes it, installs the daemon and OpenCode, opens a tunnel, and pairs."
+---
+
+## What the wizard does
+
+The Add VM wizard connects a fresh VM over SSH: Orbion probes, installs, forwards, and pairs automatically. You open it with the **Add Environment** button in the sidebar, and it walks through the steps you see in the dialog: **Probing VM**, **Installing services**, **Opening tunnel**, and **Pairing**. When the wizard needs a decision from you (for example, installing Node), the step switches to **Waiting for consent** until you answer.
+
+## Before you start
+
+Confirm you can SSH into the target from your terminal:
+
+```bash
+ssh ubuntu@192.168.1.50
+```
+
+If that command drops you into a shell, the wizard can reach the VM too.
+
+<Callout type="warn">
+Use Tailscale or a private network. Never expose your environments to the public internet. The daemon and OpenCode bind to loopback on the VM, and Orbion reaches them only through the SSH tunnel.
+</Callout>
+
+## Pick a target
+
+- **Name**: the label the environment gets in the sidebar (for example, `my-vm`). Leave it empty and the wizard uses the host name.
+- **Target (user@host)**: either a literal `user@host` such as `ubuntu@192.168.1.50`, or an alias from your SSH config. The wizard lists your aliases under **SSH config hosts**, so you can pick one instead of typing. Anything else is rejected as an invalid target.
+
+{/* screenshot: wizard-target */}
+
+## Probe step
+
+During **Probing VM**, Orbion runs checks over SSH and shows one badge per result:
+
+| Badge | Meaning |
+| --- | --- |
+| `Node v22.11.0` / `Node: not found` | Node is present (with its version) or missing |
+| `Daemon on :8845` / `Daemon: not running` | A loop-task daemon is already listening, and on which port |
+| `OpenCode on :13284` / `OpenCode: not running` | An OpenCode server is already listening, and on which port |
+
+The probe looks for Node on `PATH` and in common version manager directories (nvm, fnm, asdf, mise, volta). If SSH authentication fails or the host is unreachable, the wizard stops here with the exact error.
+
+## Consent prompts
+
+The wizard never installs anything without asking. If Node is missing, it asks "Node.js not found on the VM. Install it via mise?". If Node is older than the enforced floor of **18.0.0**, it offers an upgrade instead. Choose **Install via mise** and the wizard installs mise on the VM, installs Node 22 through it, and probes again. Choose **Skip** and the wizard stops: install Node 18 or newer yourself, then rerun it.
+
+## Install and tunnel
+
+During **Installing services**, the wizard installs `loop-task` and `opencode` globally with npm if they are missing, then starts both bound to `127.0.0.1` on the VM: the daemon on port 8845 and OpenCode on port 13284 by default. During **Opening tunnel**, it opens an SSH port forward from local port 18845 to the remote daemon port (reusing an existing forward if one is already up), so Orbion talks to the daemon at `http://127.0.0.1:18845`.
+
+<Callout type="warn">
+If the daemon port is already in use by a process the wizard did not start, the wizard stops rather than restarting someone else's daemon. Free the port on the VM, or add the environment manually: see [Connect an Environment](./connect-an-environment).
+</Callout>
+
+{/* screenshot: wizard-steps */}
+
+## Pairing
+
+During **Pairing**, the wizard asks the remote daemon for a one-time pairing code (a call to the daemon's loopback API over SSH), then exchanges that code through the tunnel for a session token with operate scope. Pairing requires a daemon version that supports it, loop-task 2.1 or later. On older daemons the wizard reports that it could not create a pairing code.
+
+## Done
+
+The environment appears in the sidebar with an **SSH** endpoint, and its loops load from the daemon. If the OpenCode badge shows **auth**, the server runs but has no provider connected yet: see [Connect OpenCode](./connect-opencode).
+
+## If something fails
+
+SSH problems during the probe: see [SSH auth failed](./troubleshooting#ssh-authentication-failed-in-the-wizard) and [Cannot reach host](./troubleshooting#environment-shows-offline-or-retrying).
+Daemon port occupied on the VM: see [Port busy](./troubleshooting#wizard-stops-with-a-port-in-use-error).

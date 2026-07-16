@@ -1,0 +1,78 @@
+---
+title: Connect an Existing Environment
+description: Register a machine that already runs the loop-task daemon, via Direct URL, SSH port forward, or Tailscale.
+---
+
+You add an Environment for each machine that runs the loop-task daemon (version 2.1 or later). This page covers machines where the daemon already runs. To provision a fresh VM, including installing the daemon, use the Add VM wizard: see [Add a remote VM](./add-a-remote-vm).
+
+Once an Environment connects, Orbion polls its loops every 5 seconds and streams logs over SSE.
+
+## Pick your path
+
+| Where the daemon runs               | How you connect                                  | Endpoint kind |
+| ----------------------------------- | ------------------------------------------------ | ------------- |
+| The same machine as Orbion          | Add the daemon URL directly                      | Direct        |
+| A remote machine you reach over SSH | Open an SSH port forward, add the forwarded URL  | SSH           |
+| A machine on your tailnet           | Use the peer's MagicDNS name                     | Tailscale     |
+
+## Why not just a URL
+
+The daemon serves its HTTP API on `127.0.0.1:8845` and binds to loopback only. A daemon on a remote machine is never directly reachable from your desktop. This is a security default: the daemon accepts connections only from its own machine, so installing it adds no new network surface. Every remote connection goes through a channel you open yourself, an SSH tunnel or your tailnet. See [Architecture](./architecture) for the full trust model.
+
+## Direct URL
+
+Use this when Orbion and the daemon run on the same machine.
+
+Confirm the daemon responds (Swagger lives at `/api/docs`):
+
+```bash
+curl http://127.0.0.1:8845/api/docs
+```
+
+Add an Environment with `http://127.0.0.1:8845` as the URL. The sidebar shows the endpoint with the Direct kind label.
+
+## SSH port forward
+
+Forward a local port to the daemon's loopback port on the remote machine:
+
+```bash
+ssh -L 8846:127.0.0.1:8845 user@vm-host
+```
+
+Then add the Environment as `http://127.0.0.1:8846` with the SSH kind. Orbion talks to your local end of the tunnel, and SSH carries the traffic to the VM.
+
+<Callout type="warn">
+The tunnel must stay open. If the SSH session ends, the endpoint goes offline and the connection supervisor keeps retrying until you reopen the tunnel.
+</Callout>
+
+<Callout type="info">
+The Add VM wizard opens and supervises a tunnel for you, so you do not have to keep a terminal running. See [Add a remote VM](./add-a-remote-vm).
+</Callout>
+
+## Tailscale
+
+Orbion discovers peers on your tailnet by running the local Tailscale CLI and lists each peer by its MagicDNS name with its online state. Requirements:
+
+- Tailscale installed and running on the machine that runs Orbion (the `tailscale` CLI must be on your PATH).
+- Tailscale running on the target machine. Peers without a MagicDNS name do not appear.
+
+The daemon still binds to loopback, so the MagicDNS name also works as the SSH target for the port forward above:
+
+```bash
+ssh -L 8846:127.0.0.1:8845 ubuntu@vm.your-tailnet.ts.net
+```
+
+## Multiple endpoints per Environment
+
+An Environment holds several endpoints, for example a Tailscale route plus an SSH tunnel as a fallback. One endpoint is active at a time. When the selected Environment has more than one endpoint, the sidebar lists them under it with their kind and host. Click an endpoint to make it active.
+
+The connection supervisor retries a failing endpoint with exponential backoff, starting at 1 second and capping at 16 seconds. While it waits, the Environment's sidebar tooltip shows the retry text, for example "Retrying in 8s (4 failures)". See [Statuses](./statuses) for every connection state.
+
+{/* screenshot: endpoints */}
+
+## Remove or retry
+
+Both actions live on the Environment's sidebar row:
+
+- **Retry connection**: appears when the Environment is in backoff or blocked. Click it to reconnect immediately instead of waiting out the backoff.
+- **Remove environment**: click the X and confirm. This deletes the entry from Orbion only. The daemon keeps running on its machine.

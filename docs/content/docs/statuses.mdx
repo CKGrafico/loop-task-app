@@ -1,0 +1,64 @@
+---
+title: Status Reference
+description: "Every dot, badge, and pill in Orbion, in one place."
+---
+
+## Environment connection states
+
+Orbion supervises the active endpoint of every Environment and reports one of five states in the sidebar (see [Connect an environment](./connect-an-environment)).
+
+| State | What the sidebar shows | What it means | What to do |
+| --- | --- | --- | --- |
+| `connected` | `Connected` | The active endpoint answers on the daemon port. | Nothing. |
+| `connecting` | `Connecting…` | Orbion is contacting the active endpoint. | Wait a few seconds. |
+| `backoff` | `Retrying in 5s (2 failures)` | The last request failed with a transient error; Orbion retries with an increasing delay. | Wait, or click `Retry connection`. If it persists, check the daemon on the VM ([Troubleshooting](./troubleshooting)). |
+| `offline` | `offline` label, `Offline — no network` tooltip | Your machine reports no network. | Restore the network; Orbion reconnects when it returns, or click `Retry connection`. |
+| `blocked` | `blocked` badge, `Blocked` tooltip or the specific error | A blocking error such as rejected auth; automatic retries stop. | Fix the cause (re-pair the Environment), then click `Retry connection`. |
+
+{/* screenshot: sidebar-connection-states */}
+
+## Loop statuses
+
+Orbion polls loop statuses from the daemon every 5 seconds and only observes them: you create, pause, or trigger loops with the loop-task CLI (see [Monitor loops](./monitor-loops)).
+
+| Status | Meaning | Typical cause |
+| --- | --- | --- |
+| `running` | A run is executing right now. | The interval fired, or you triggered a run with the CLI. |
+| `waiting` | No run is executing; the next run is scheduled. | Normal state between runs of an active loop. |
+| `paused` | The loop keeps its configuration but does not run. | You paused it with the loop-task CLI. |
+| `idle` | The loop has no run executing or scheduled. | The loop exists but has not been started. |
+| `stopped` | The loop no longer runs. | You stopped it with the loop-task CLI, or the daemon halted it. |
+
+## OpenCode connection states
+
+The sidebar reports the OpenCode server of each Environment as `OpenCode:` plus a detail, with a short badge (`oc:ok`, `oc:auth`, `oc:?`); see [Connect OpenCode](./connect-opencode).
+
+| State | Meaning | Typical cause |
+| --- | --- | --- |
+| connected | The server answers and at least one provider is authenticated. | Normal state; chat is available. |
+| needs auth | The server answers but no provider is authenticated. | Fresh OpenCode install with no provider login yet. |
+| unknown | Orbion has not completed a status check. | The Environment was just added, or the check has not run yet. |
+| unreachable | The OpenCode server does not answer. | OpenCode is not running on the VM, or the SSH tunnel is down. |
+| version too old | The server version is below Orbion's minimum. | Outdated OpenCode install; update OpenCode on the VM. |
+| rejected | The server refused the request. | Wrong password or access denied by the OpenCode server. |
+
+To clear needs auth, sign in to a provider on the VM:
+
+```bash
+opencode auth login
+```
+
+## Fleet status pills
+
+Each Environment rolls its loops and chat turns up to one pill in the sidebar, and the highest priority status wins: `approval > input > failed > working > done > idle`.
+
+| Pill | What it signals | OS notification |
+| --- | --- | --- |
+| `approval` | A chat turn waits for you to approve a command or file change. | Yes |
+| `input` | The agent asked a question and waits for your answer. | Yes |
+| `working` | A chat turn is running, or a loop run is executing. | No |
+| `done` | The last chat turn finished. | No |
+| `failed` | A loop exited nonzero or is stopped, or a chat turn was interrupted. | Yes |
+| `idle` | Nothing needs attention; loops are waiting, paused, or idle. | No |
+
+{/* screenshot: fleet-status-pills */}

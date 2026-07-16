@@ -1,0 +1,114 @@
+---
+title: Troubleshooting
+description: Symptom to fix, fastest path first.
+---
+
+Each section is a symptom you see in Orbion, the usual cause, and the fastest fix. Most connection problems reduce to one check on the machine that runs the daemon:
+
+```bash
+curl http://127.0.0.1:8845/api/loops
+```
+
+<Callout type="info">
+The loop-task daemon binds to loopback only. You cannot curl it from another machine: run checks on the VM itself, or through the SSH forward. The daemon also serves interactive API docs at `http://127.0.0.1:8845/api/docs`.
+</Callout>
+
+## Environment shows Offline or Retrying
+
+Cause: the daemon is not running, or the tunnel between Orbion and the VM dropped.
+
+On the machine, check the daemon:
+
+```bash
+curl http://127.0.0.1:8845/api/loops
+```
+
+If curl fails, start the daemon (loop-task 2.1 or later). If curl succeeds, the SSH forward dropped: re-open it, then click Retry connection on the Environment in the sidebar.
+
+```bash
+ssh -N -L 18845:127.0.0.1:8845 user@host
+```
+
+## "Could not reach `{url}`" error
+
+The loops view shows "Could not reach `{url}`. Is the loop-task daemon running?"
+
+Cause: the Environment URL points at the wrong port, or the daemon is down.
+
+Verify on the machine, using the port from the error message:
+
+```bash
+curl http://127.0.0.1:8845/api/loops
+```
+
+Orbion requires loop-task 2.1 or later. If curl works but Orbion does not, check that the Environment URL matches the port curl answered on.
+
+## SSH authentication failed in the wizard
+
+The Add VM wizard stops with "SSH authentication failed. Check your key or password."
+
+Cause: the wizard uses your existing SSH setup. If plain SSH cannot log in, neither can the wizard.
+
+Confirm this works from the same machine first:
+
+```bash
+ssh user@host
+```
+
+If it fails, fix your key or `~/.ssh/config` entry, then run the wizard again.
+
+## Wizard stops with a port-in-use error
+
+The Add VM wizard stops with "Port `{port}` is already in use by another process on the VM. The wizard will not restart a daemon it didn't start."
+
+Cause: another process owns the daemon port on the VM.
+
+Find the owner on the VM:
+
+```bash
+ss -ltnp | grep 8845
+```
+
+Stop that process to free the port, or, if it is a daemon you manage yourself, skip the wizard and register the Environment manually. See [Connect an Environment](./connect-an-environment).
+
+## OpenCode badge shows auth
+
+The Environment's OpenCode badge in the sidebar reads `oc:auth`, with the tooltip "OpenCode: opencode auth login".
+
+Cause: the OpenCode server on the VM has no authenticated provider.
+
+Run this on the VM:
+
+```bash
+opencode auth login
+```
+
+Then restart Orbion: it probes every OpenCode endpoint at launch. See [Connect OpenCode](./connect-opencode).
+
+## Infrastructure runtime unreachable
+
+The Infrastructure chat replies "Unable to reach the infrastructure runtime. Check that the main VM is connected."
+
+Cause: the main VM is disconnected, or no main VM is configured.
+
+Reconnect the Environment marked "main" in the sidebar. If you removed it, choose another Environment in the "Pick a new main VM" dialog, or Skip to disable the Infrastructure assistant.
+
+## No notifications
+
+Cause: the Environment is muted, or your OS blocks notifications from Orbion.
+
+Click Unmute notifications on the Environment in the sidebar. If it is already unmuted, allow notifications for Orbion in your OS settings (Windows: Settings, System, Notifications; macOS: System Settings, Notifications).
+
+## I want to pause or trigger a loop from Orbion
+
+You cannot in v0.1. Orbion observes loops: it only issues GET requests to the daemon. Use the loop-task CLI on the machine that runs the loop to create, pause, or trigger it. Orbion polls loops every 5 seconds, so the change appears in the app shortly after.
+
+## Logs stop updating
+
+Cause: Follow is off, or the SSE stream behind the log view dropped.
+
+Click Follow in the Logs panel so it reads Following. If the Environment shows Retrying in the sidebar, click Retry connection: the log stream reconnects with the Environment.
+
+<Callout type="warn">
+If logs still stall while loops keep updating, the SSE connection is being cut by something between Orbion and the daemon, typically an idle SSH forward. Re-open the forward and toggle Follow again.
+</Callout>

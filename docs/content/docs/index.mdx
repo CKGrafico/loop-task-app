@@ -1,0 +1,65 @@
+---
+title: Orbion Documentation
+description: "Desktop control plane for machines running the loop-task daemon: environments, loops, live logs, and a fleet assistant."
+---
+
+import { Cards, Card } from "fumadocs-ui/components/card";
+
+Orbion is an open-source Electron app that monitors fleets of machines running the loop-task daemon. You register Environments, watch their loops and logs live, and operate the fleet through an AI Infrastructure assistant that runs on your main VM. Orbion is MIT licensed, with source at [github.com/CKGrafico/orbion](https://github.com/CKGrafico/orbion).
+
+{/* screenshot: fleet-view */}
+
+<Callout type="info">
+Orbion v0.1 runs from source only; there are no packaged installers. Loop control is read-only: Orbion observes loops, and for loop, project, task, and log data it issues only GET requests to the daemon. Use the loop-task CLI on the machine to create, pause, or edit loops.
+</Callout>
+
+## Requirements
+
+| Requirement | Notes |
+| --- | --- |
+| Node.js 20 or later | Runs Orbion from source. |
+| pnpm | Installs dependencies and runs the dev scripts. |
+| loop-task daemon 2.1 or later | HTTP API enabled, default `127.0.0.1:8845`. The API binds to loopback only. |
+| SSH or Tailscale (optional) | Reaches daemons on remote VMs, since the API is loopback only. |
+| OpenCode (optional) | Enables chat and the Infrastructure assistant. |
+
+## Guides
+
+<Cards>
+  <Card
+    title="Quickstart"
+    href="./quickstart"
+    description="Clone the repo, install dependencies, and connect your first Environment."
+  />
+  <Card
+    title="Add a remote VM"
+    href="./add-a-remote-vm"
+    description="Use the Add VM wizard to probe a VM over SSH, install services, open a tunnel, and pair."
+  />
+  <Card
+    title="Monitor loops"
+    href="./monitor-loops"
+    description="Read loop status, run history, and live logs streamed over SSE."
+  />
+  <Card
+    title="Use the Infrastructure assistant"
+    href="./use-the-infra-assistant"
+    description="Chat with the Infrastructure assistant on your main VM to check machine status and clone repos."
+  />
+</Cards>
+
+## Vocabulary
+
+- **Environment**: a machine running the loop-task daemon, registered in Orbion and listed in the sidebar.
+- **Endpoint**: a URL Orbion uses to reach an Environment, with kind Direct, SSH, or Tailscale.
+- **Loop**: a recurring command the daemon runs; its status is running, waiting, paused, idle, or stopped.
+- **Project**: a group of loops on an Environment.
+- **Task**: a reusable command on an Environment, optionally chained on success or on failure.
+- **Main VM**: the Environment the Infrastructure assistant runs on.
+- **Infrastructure assistant**: the chat agent on the main VM that reports machine status and clones repositories on your VMs.
+- **Fleet status**: pills next to each Environment showing agent activity: approval, input, working, done, failed, or idle.
+
+## Get help
+
+- Report bugs and ask questions on [GitHub issues](https://github.com/CKGrafico/orbion/issues).
+- Inspect the daemon API with Swagger at `http://127.0.0.1:8845/api/docs` on any machine running the daemon.

@@ -4,6 +4,7 @@ import type { Environment, EnvironmentHealth, AccessEndpoint, OpenCodeConnection
 import type { FleetItemStatus } from "../fleet-status";
 import { Terminal, RotateCw, X, Bell, BellOff } from "lucide-react";
 import { StatusPill, UnreadDot } from "./StatusPill";
+import { OrbionMark } from "./OrbionMark";
 import { hostLabel } from "../format";
 import { translateMessage } from "../i18n";
 
@@ -244,7 +245,7 @@ export function Sidebar(props: {
       </div>
 
       <div className="sidebar-footer">
-        <span className="avatar">{intl.formatMessage({ id: "sidebar.orbionInitials" })}</span>
+        <OrbionMark size={24} />
         <span>{intl.formatMessage({ id: "sidebar.orbion" })}</span>
       </div>
     </div>

@@ -3,8 +3,23 @@ import enMessages from "./en.json";
 import type { I18nMessage } from "../../../shared/ipc";
 
 export const defaultLocale = "en";
-export const messages: Record<string, Record<string, unknown>> = {
-  en: enMessages,
+
+/** react-intl needs flat "a.b.c" ids; the catalog files are nested for readability. */
+function flattenMessages(nested: Record<string, unknown>, prefix = ""): Record<string, string> {
+  const flat: Record<string, string> = {};
+  for (const [key, value] of Object.entries(nested)) {
+    const id = prefix ? `${prefix}.${key}` : key;
+    if (typeof value === "string") {
+      flat[id] = value;
+    } else if (value && typeof value === "object") {
+      Object.assign(flat, flattenMessages(value as Record<string, unknown>, id));
+    }
+  }
+  return flat;
+}
+
+export const messages: Record<string, Record<string, string>> = {
+  en: flattenMessages(enMessages),
 };
 
 const intlConfig: ResolvedIntlConfig = {

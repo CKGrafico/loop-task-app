@@ -1,0 +1,27 @@
+/**
+ * Orbion brand mark: an orbit ring with a satellite dot, drawn as a single
+ * simple geometric SVG. The dot sits on the ring at 45deg, lime on navy.
+ */
+export function OrbionMark({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 32 32"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-hidden
+    >
+      <rect width="32" height="32" rx="9" fill="#141d2b" />
+      <rect
+        x="0.5"
+        y="0.5"
+        width="31"
+        height="31"
+        rx="8.5"
+        stroke="#2a3a54"
+      />
+      <circle cx="16" cy="16" r="8.5" stroke="#a4b1cd" strokeWidth="1.5" />
+      <circle cx="22.1" cy="9.9" r="3" fill="#a9d95c" />
+    </svg>
+  )
+}

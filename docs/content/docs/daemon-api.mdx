@@ -1,0 +1,50 @@
+---
+title: Daemon API Used by Orbion
+description: The loop-task HTTP endpoints Orbion consumes, plus polling and streaming behavior.
+---
+
+## Scope
+
+This page documents the endpoints Orbion calls, not the full loop-task API. For the complete reference, the daemon serves Swagger at `http://127.0.0.1:8845/api/docs` on any machine where it runs.
+
+## Requirements
+
+- loop-task 2.1 or later on each Environment.
+- The daemon HTTP API listening on `127.0.0.1:8845` (the default port).
+- Loopback bind only. The Add VM wizard starts the daemon with `loop-task serve --host 127.0.0.1` and Orbion reaches remote VMs through an SSH tunnel, so the API never listens on a public interface. See [Add a Remote VM](./add-a-remote-vm).
+
+## Endpoints
+
+| Endpoint | Used for | Cadence |
+| --- | --- | --- |
+| `GET /api/loops` | Loop list for the selected Environment, fleet status pills, connection health probe | Every 5 seconds; probe backs off from 1 to 16 seconds while unreachable |
+| `GET /api/loops/:id` | Loop detail view | Every 5 seconds while the view is open |
+| `GET /api/projects` | Projects view | Every 10 seconds while the view is open |
+| `GET /api/tasks` | Reserved in Orbion's API client for reusable tasks | Not requested by any view yet |
+| `GET /api/loops/:id/logs?tail=N` | Log backfill when you open a loop's logs (`tail=200`) | Once per open |
+| `GET /api/loops/:id/logs/stream` | Live log lines over SSE | Held open while the log view is visible |
+
+## Polling and streaming
+
+You see loop data refresh every 5 seconds and project data every 10 seconds: Orbion polls, the daemon keeps no client state. Logs work differently. When you open a loop's logs, Orbion fetches the last 200 lines once, then holds a Server-Sent Events connection to `/logs/stream` and appends lines as the daemon pushes them. Logs are push rather than poll because lines arrive in bursts and tailing needs them immediately.
+
+Connection health rides on the same API: Orbion's main process probes `GET /api/loops` and reports the result as the fleet status pills. If an Environment shows as unreachable, start with [Troubleshooting](./troubleshooting).
+
+## Read-only in v0.1
+
+<Callout type="info">
+Orbion observes loops. For loop, project, task, and log data it issues only GET requests in v0.1 and never mutates daemon state. Use the loop-task CLI to create, pause, or trigger loops.
+</Callout>
+
+The one non-GET call sits outside loop data: during pairing, Orbion sends `POST /api/pair/exchange` once to trade a pairing code for a scoped session token. It does not touch loops, projects, or tasks.
+
+## Try it yourself
+
+Run these on the machine where the daemon runs (or through your SSH tunnel):
+
+```bash
+curl http://127.0.0.1:8845/api/loops
+curl -N http://127.0.0.1:8845/api/loops/<id>/logs/stream
+```
+
+The first returns the loop list as JSON. The second (`-N` disables buffering) tails the SSE stream until you press Ctrl+C.

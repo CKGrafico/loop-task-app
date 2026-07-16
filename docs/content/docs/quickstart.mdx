@@ -1,0 +1,84 @@
+---
+title: Quickstart
+description: Run Orbion from source and watch your first loops in under ten minutes.
+---
+
+import { Cards, Card } from "fumadocs-ui/components/card";
+
+Orbion is a desktop app that watches loop-task daemons across your machines. This page takes you from a clean checkout to a live loop view.
+
+## Prerequisites
+
+You need:
+
+- Node.js 20 or newer
+- pnpm
+- A machine with the loop-task daemon running, version 2.1 or newer
+
+Daemon installation is covered in the [loop-task repository](https://github.com/CKGrafico/loop-task). This page assumes the daemon is already up.
+
+## Verify the daemon first
+
+The daemon serves its HTTP API on port 8845 and binds to loopback only. Confirm it responds before you launch the app:
+
+```bash
+curl http://127.0.0.1:8845/api/loops
+```
+
+A JSON array of loops (empty is fine) means the daemon is healthy. For a browsable sanity check, open the Swagger UI at `http://127.0.0.1:8845/api/docs`.
+
+## Run Orbion from source
+
+```bash
+git clone https://github.com/CKGrafico/orbion
+cd orbion
+pnpm install
+pnpm dev
+```
+
+<Callout type="info">
+v0.1 ships no packaged installers. Running `pnpm dev` from a clone is the supported way to run the app.
+</Callout>
+
+## Add your first Environment
+
+Click **Add Environment** in the sidebar. The first Environment you add becomes the main VM, the machine that runs the [Infrastructure assistant](./use-the-infra-assistant).
+
+For a daemon on your own machine, use a **Direct** endpoint with the URL `http://127.0.0.1:8845`. The **SSH** endpoint kind connects remote machines, covered in [Add a remote VM](./add-a-remote-vm); **Tailscale** endpoints are covered in [Connect an Existing Environment](./connect-an-environment).
+
+{/* screenshot: first-environment */}
+
+## Look around
+
+When the Environment connects, its health dot in the sidebar turns green. The **Loops** tab lists every loop with its status, interval, and next run. Click a loop to open its detail view, then turn on **Follow** in the Logs panel to watch output as it arrives.
+
+Two refresh behaviors worth knowing: the loop list polls the daemon every 5 seconds, while logs are pushed to the app over a live stream.
+
+Orbion observes loops. Use the loop-task CLI to create, pause, or trigger them; for loop, project, task, and log data the app only issues GET requests to the daemon.
+
+{/* screenshot: log-follow */}
+
+## Optional: browser mode without a daemon
+
+You can explore the UI without any daemon by running the browser build with mock data:
+
+```bash
+pnpm dev:web
+```
+
+It serves on port 5183 with fake data. Use it for UI development and screenshots, not for real monitoring.
+
+## Next steps
+
+<Cards>
+  <Card
+    title="Add a remote VM"
+    href="./add-a-remote-vm"
+    description="Connect machines over SSH with the Add VM wizard."
+  />
+  <Card
+    title="Monitor loops"
+    href="./monitor-loops"
+    description="Loop statuses, intervals, log streaming, and notifications in depth."
+  />
+</Cards>
