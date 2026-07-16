@@ -21,7 +21,6 @@ import { hostLabel, timeAgo } from "./format";
 import { translateMessage, standaloneIntl } from "./i18n";
 import { cid, useInject } from "inversify-hooks";
 import type { IConnectionService, IOpenCodeService, IConfigService } from "./services/interfaces";
-import { fetchLoops, fetchSettings, isMock } from "./api";
 
 type View = { kind: "list" } | { kind: "loop"; loopId: string };
 
