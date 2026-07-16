@@ -189,12 +189,20 @@ export type VmWizardStep =
   | "idle"
   | "pick-target"
   | "probing"
+  | "pick-services"
   | "installing"
   | "forwarding"
   | "pairing"
   | "consent"
   | "done"
   | "error";
+
+export type VmWizardServiceStatus = "pending" | "skipped" | "already-running" | "installing" | "installed" | "started" | "failed";
+
+export interface VmWizardServiceSelection {
+  installLoopTask: boolean;
+  installOpenCode: boolean;
+}
 
 export interface SshHost {
   host: string;
@@ -223,6 +231,8 @@ export interface VmWizardLaunchResult {
   opencodePort: number | null;
   errorDetail: I18nMessage | null;
   logTail: string | null;
+  loopTaskStatus: VmWizardServiceStatus;
+  openCodeStatus: VmWizardServiceStatus;
 }
 
 export interface VmWizardTunnelResult {
@@ -245,6 +255,7 @@ export interface VmWizardProgress {
   tunnel?: VmWizardTunnelResult | null;
   pair?: VmWizardPairResult | null;
   consentPrompt?: I18nMessage | null;
+  serviceSelection?: VmWizardServiceSelection | null;
 }
 
 export interface VmWizardResult {
@@ -259,6 +270,7 @@ export interface VmWizardBridge {
   onProgress: (cb: (progress: VmWizardProgress) => void) => () => void;
   cancelWizard: () => void;
   respondConsent: (decision: "install" | "skip") => void;
+  respondServiceSelection: (selection: VmWizardServiceSelection) => void;
 }
 
 // ── Full IPC bridge ─────────────────────────────────────────────────
