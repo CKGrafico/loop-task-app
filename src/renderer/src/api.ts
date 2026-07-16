@@ -1,8 +1,7 @@
+import { cid, useInject } from "inversify-hooks";
 import type { ApiResponse, StreamEventPayload } from "../../shared/ipc";
 import type { Environment, LoopMeta, Project, TaskDefinition } from "./types";
-import { mockRequest, mockSubscribeLogs } from "./mock";
-
-export const isMock = typeof window !== "undefined" && !window.api;
+import type { IApiService, IStreamService } from "./services/interfaces";
 
 export function resolveBaseUrl(env: Environment): string {
   if (env.activeEndpointId) {
@@ -12,21 +11,77 @@ export function resolveBaseUrl(env: Environment): string {
   return env.endpoints.length > 0 ? env.endpoints[0].url : "";
 }
 
-export async function apiRequest<T = unknown>(
-  env: Environment,
-  path: string,
-  method: "GET" | "POST" | "PATCH" | "DELETE" = "GET",
-  body?: unknown,
-): Promise<ApiResponse<T>> {
-  if (!window.api) {
-    return mockRequest<T>(path);
-  }
-  const baseUrl = resolveBaseUrl(env);
-  return window.api.request<T>({ baseUrl, path, method, body });
-}
+export function useApi(): {
+  fetchLoops: (env: Environment) => Promise<ApiResponse<LoopMeta[]>>;
+  fetchLoop: (env: Environment, id: string) => Promise<ApiResponse<LoopMeta>>;
+  fetchProjects: (env: Environment) => Promise<ApiResponse<Project[]>>;
+  fetchTasks: (env: Environment) => Promise<ApiResponse<TaskDefinition[]>>;
+  fetchLogs: (env: Environment, loopId: string, tail: number) => Promise<ApiResponse<string>>;
+  fetchSettings: (env: Environment) => Promise<ApiResponse<DaemonSettings>>;
+  subscribeLogs: (env: Environment, loopId: string, onLine: (line: string) => void, onClose?: () => void) => () => void;
+} {
+  const [apiService] = useInject<IApiService>(cid.IApiService);
 
-export function fetchLoops(env: Environment): Promise<ApiResponse<LoopMeta[]>> {
-  return apiRequest<LoopMeta[]>(env, "/api/loops");
+  const apiRequest = <T = unknown>(
+    env: Environment,
+    path: string,
+    method: "GET" | "POST" | "PATCH" | "DELETE" = "GET",
+    body?: unknown,
+  ): Promise<ApiResponse<T>> => {
+    const baseUrl = resolveBaseUrl(env);
+    return apiService.request<T>({ baseUrl, path, method, body });
+  };
+
+  const fetchLoops = (env: Environment): Promise<ApiResponse<LoopMeta[]>> =>
+    apiRequest<LoopMeta[]>(env, "/api/loops");
+
+  const fetchLoop = (env: Environment, id: string): Promise<ApiResponse<LoopMeta>> =>
+    apiRequest<LoopMeta>(env, `/api/loops/${encodeURIComponent(id)}`);
+
+  const fetchProjects = (env: Environment): Promise<ApiResponse<Project[]>> =>
+    apiRequest<Project[]>(env, "/api/projects");
+
+  const fetchTasks = (env: Environment): Promise<ApiResponse<TaskDefinition[]>> =>
+    apiRequest<TaskDefinition[]>(env, "/api/tasks");
+
+  const fetchLogs = (env: Environment, loopId: string, tail: number): Promise<ApiResponse<string>> =>
+    apiRequest<string>(env, `/api/loops/${encodeURIComponent(loopId)}/logs?tail=${tail}`);
+
+  const fetchSettings = (env: Environment): Promise<ApiResponse<DaemonSettings>> =>
+    apiRequest<DaemonSettings>(env, "/api/settings");
+
+  const subscribeLogs = (
+    env: Environment,
+    loopId: string,
+    onLine: (line: string) => void,
+    onClose?: () => void,
+  ): (() => void) => {
+    const [streamService] = useInject<IStreamService>(cid.IStreamService);
+    const subId = crypto.randomUUID();
+
+    const baseUrl = resolveBaseUrl(env);
+    void streamService.subscribeStream({
+      subId,
+      baseUrl,
+      path: `/api/loops/${encodeURIComponent(loopId)}/logs/stream?tail=0`,
+    });
+
+    const unsub = streamService.onStreamEvent((payload: StreamEventPayload) => {
+      if (payload.subId !== subId) return;
+      if (payload.kind === "data") onLine(payload.text);
+      else if (payload.kind === "end" || payload.kind === "error") {
+        onClose?.();
+        void streamService.unsubscribeStream(subId);
+      }
+    });
+
+    return () => {
+      unsub();
+      void streamService.unsubscribeStream(subId);
+    };
+  };
+
+  return { fetchLoops, fetchLoop, fetchProjects, fetchTasks, fetchLogs, fetchSettings, subscribeLogs };
 }
 
 export interface DaemonSettings {
@@ -35,77 +90,18 @@ export interface DaemonSettings {
   httpApiHost: string;
 }
 
-export function fetchSettings(env: Environment): Promise<ApiResponse<DaemonSettings>> {
-  return apiRequest<DaemonSettings>(env, "/api/settings");
-}
+// Standalone functions for components that can't use hooks (e.g. inside effects)
+// These use the container directly
+import { container } from "inversify-hooks";
+import type { ApiRequestArgs } from "../../shared/ipc";
 
-export function fetchLoop(env: Environment, id: string): Promise<ApiResponse<LoopMeta>> {
-  return apiRequest<LoopMeta>(env, `/api/loops/${encodeURIComponent(id)}`);
-}
-
-export function fetchProjects(env: Environment): Promise<ApiResponse<Project[]>> {
-  return apiRequest<Project[]>(env, "/api/projects");
-}
-
-export function fetchTasks(env: Environment): Promise<ApiResponse<TaskDefinition[]>> {
-  return apiRequest<TaskDefinition[]>(env, "/api/tasks");
-}
-
-export function fetchLogs(
+export function apiRequest<T = unknown>(
   env: Environment,
-  loopId: string,
-  tail: number,
-): Promise<ApiResponse<string>> {
-  return apiRequest<string>(env, `/api/loops/${encodeURIComponent(loopId)}/logs?tail=${tail}`);
-}
-
-interface LogStreamHandlers {
-  onLine: (line: string) => void;
-  onClose?: () => void;
-}
-
-const handlers = new Map<string, LogStreamHandlers>();
-let globalUnlisten: (() => void) | null = null;
-
-function ensureGlobalListener(): void {
-  if (globalUnlisten || !window.api) return;
-  globalUnlisten = window.api.onStreamEvent((payload: StreamEventPayload) => {
-    const handler = handlers.get(payload.subId);
-    if (!handler) return;
-    if (payload.kind === "data") {
-      handler.onLine(payload.text);
-    } else if (payload.kind === "end" || payload.kind === "error") {
-      handler.onClose?.();
-      handlers.delete(payload.subId);
-    }
-  });
-}
-
-export function subscribeLogs(
-  env: Environment,
-  loopId: string,
-  onLine: (line: string) => void,
-  onClose?: () => void,
-): () => void {
-  if (!window.api) {
-    return mockSubscribeLogs(loopId, onLine);
-  }
-
-  ensureGlobalListener();
-  const subId = crypto.randomUUID();
-  handlers.set(subId, { onLine, onClose });
-
+  path: string,
+  method: "GET" | "POST" | "PATCH" | "DELETE" = "GET",
+  body?: unknown,
+): Promise<ApiResponse<T>> {
+  const apiService = container.resolve<IApiService>("IApiService");
   const baseUrl = resolveBaseUrl(env);
-  void window.api.subscribeStream({
-    subId,
-    baseUrl,
-    path: `/api/loops/${encodeURIComponent(loopId)}/logs/stream?tail=0`,
-  });
-
-  return () => {
-    handlers.delete(subId);
-    void window.api?.unsubscribeStream(subId);
-  };
+  return apiService.request<T>({ baseUrl, path, method, body });
 }
-
-
