@@ -20,6 +20,9 @@ importers:
       highlight.js:
         specifier: ^11.11.1
         version: 11.11.1
+      inversify-hooks:
+        specifier: ^4.0.0
+        version: 4.0.0(react@19.2.7)(reflect-metadata@0.2.2)
       lucide-react:
         specifier: ^0.469.0
         version: 0.469.0(react@19.2.7)
@@ -874,6 +877,28 @@ packages:
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
     cpu: [x64]
     os: [win32]
+
+  '@inversifyjs/common@2.0.1':
+    resolution: {integrity: sha512-pJAR4IAcT2jkYfZ9bD9XhtUDBLJRr8QOiSjb+2XyaHru6DLvu0VD2Id2iP7+tVRKkEe3XFUwDUEdKxcYlF699Q==}
+
+  '@inversifyjs/container@3.1.0':
+    resolution: {integrity: sha512-ARvOE8Uo8WQV+a4asM3RuYBTm403dFjfv8BIr6ovhCzWpvQph7f2GK+MHX13hOrCKEy60u/Ui9N8bUhcVBEXxQ==}
+    peerDependencies:
+      reflect-metadata: ~0.2.2
+
+  '@inversifyjs/core@13.0.0':
+    resolution: {integrity: sha512-EIU2r2xHguRejKP92u9Y+nVNV+2Jr2iGibNWDMBjfyMcamhyoALjjgOgoH+HSm9GB/WxN+DYEOKl4BdK4ItToA==}
+
+  '@inversifyjs/plugin@0.3.1':
+    resolution: {integrity: sha512-ByklTw731fydBCTMwMpkmwm+lv0U+JWm9NEqRsz3n5KzAC5Om2XtLjqzEC2w+8Ote3gVC3Qxsx6YmG9XLIZpvg==}
+
+  '@inversifyjs/prototype-utils@0.2.1':
+    resolution: {integrity: sha512-53cVE3cw+RxnSkGlg+jOFNSox2owJF9Fv3HgFKe4f+4aPullscltIiio88QRkx2Sc5yo3VlqPsXQFGw2CVJZnw==}
+
+  '@inversifyjs/reflect-metadata-utils@1.5.0':
+    resolution: {integrity: sha512-NpJVbRbuQ6Ao2vO+aw96un3oHDFCwXI0+pplsFt0Jh0gyR8DWk4m7ml/GBNMjdbeKVW/QgJ2S6NGXjk042uwqg==}
+    peerDependencies:
+      reflect-metadata: ~0.2.2
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -2413,6 +2438,17 @@ packages:
   intl-messageformat@11.2.11:
     resolution: {integrity: sha512-aDG5bvFRbQvRoT2Bh9FV6yV8t7o0MjEGknZ6pnin5Wt52PJwaBOHDfvz+oPEe78Pl3InQYKugBgCdXijLj6viQ==}
 
+  inversify-hooks@4.0.0:
+    resolution: {integrity: sha512-uqq+EQ6G6Ke5GwK3pIOdzTdE8S3WGWOAWV8JG7sgp/ztzjCeSZohhTCG7MMX+M7h4C9NelJ/dMTp3LpucEMkSQ==}
+    peerDependencies:
+      react: '>=16.8.0'
+
+  inversify-props@3.0.0:
+    resolution: {integrity: sha512-JT1zTHDXrH3yvMCnVMXQVpzYyoOG9MuTv0hLrhnMFgkTAos/4rrKx9I/d/XdoA0UFWEMICuYBWryNeLTeqP6Vw==}
+
+  inversify@8.2.0:
+    resolution: {integrity: sha512-6I0hFzGoYLromNy5k8/T8MF+H1roEIpw/4rVUZSFXp1+ihF4yM8W3U2BZeVdMZPRolMbaqvhIFom7kvUnkkD4A==}
+
   is-alphabetical@2.0.1:
     resolution: {integrity: sha512-FWyyY60MeTNyeSRpkM2Iry0G9hpr7/9kD40mD/cGQEuilcZYS4okz8SN2Q6rLCJ8gbCt6fN+rC+6tMGS99LaxQ==}
 
@@ -2995,6 +3031,9 @@ packages:
 
   recma-stringify@1.0.0:
     resolution: {integrity: sha512-cjwII1MdIIVloKvC9ErQ+OgAtwHBmcZ0Bg4ciz78FtbT8In39aAYbaA7zvxQ61xVMSPE8WxhLwLbhif4Js2C+g==}
+
+  reflect-metadata@0.2.2:
+    resolution: {integrity: sha512-urBwgfrvVP/eAyXx4hluJivBKzuEbSQs9rKWCrCkbSxNv8mxPcUZKeuoF3Uy4mJl3Lwprp6yy5/39VWigZ4K6Q==}
 
   regex-recursion@6.0.2:
     resolution: {integrity: sha512-0YCaSCq2VRIebiaUviZNs0cBz1kg5kVS2UKUfNIx8YVs1cN3AV7NTctO5FOKBA+UT2BPJIWZauYHPqJODG50cg==}
@@ -3890,6 +3929,34 @@ snapshots:
 
   '@img/sharp-win32-x64@0.34.5':
     optional: true
+
+  '@inversifyjs/common@2.0.1': {}
+
+  '@inversifyjs/container@3.1.0(reflect-metadata@0.2.2)':
+    dependencies:
+      '@inversifyjs/common': 2.0.1
+      '@inversifyjs/core': 13.0.0(reflect-metadata@0.2.2)
+      '@inversifyjs/plugin': 0.3.1
+      '@inversifyjs/reflect-metadata-utils': 1.5.0(reflect-metadata@0.2.2)
+      reflect-metadata: 0.2.2
+
+  '@inversifyjs/core@13.0.0(reflect-metadata@0.2.2)':
+    dependencies:
+      '@inversifyjs/common': 2.0.1
+      '@inversifyjs/prototype-utils': 0.2.1
+      '@inversifyjs/reflect-metadata-utils': 1.5.0(reflect-metadata@0.2.2)
+    transitivePeerDependencies:
+      - reflect-metadata
+
+  '@inversifyjs/plugin@0.3.1': {}
+
+  '@inversifyjs/prototype-utils@0.2.1':
+    dependencies:
+      '@inversifyjs/common': 2.0.1
+
+  '@inversifyjs/reflect-metadata-utils@1.5.0(reflect-metadata@0.2.2)':
+    dependencies:
+      reflect-metadata: 0.2.2
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
@@ -5466,6 +5533,27 @@ snapshots:
       '@formatjs/fast-memoize': 3.1.7
       '@formatjs/icu-messageformat-parser': 3.5.14
 
+  inversify-hooks@4.0.0(react@19.2.7)(reflect-metadata@0.2.2):
+    dependencies:
+      inversify-props: 3.0.0(reflect-metadata@0.2.2)
+      react: 19.2.7
+    transitivePeerDependencies:
+      - reflect-metadata
+
+  inversify-props@3.0.0(reflect-metadata@0.2.2):
+    dependencies:
+      inversify: 8.2.0(reflect-metadata@0.2.2)
+    transitivePeerDependencies:
+      - reflect-metadata
+
+  inversify@8.2.0(reflect-metadata@0.2.2):
+    dependencies:
+      '@inversifyjs/common': 2.0.1
+      '@inversifyjs/container': 3.1.0(reflect-metadata@0.2.2)
+      '@inversifyjs/core': 13.0.0(reflect-metadata@0.2.2)
+    transitivePeerDependencies:
+      - reflect-metadata
+
   is-alphabetical@2.0.1: {}
 
   is-alphanumerical@2.0.1:
@@ -6276,6 +6364,8 @@ snapshots:
       estree-util-to-js: 2.0.0
       unified: 11.0.5
       vfile: 6.0.3
+
+  reflect-metadata@0.2.2: {}
 
   regex-recursion@6.0.2:
     dependencies:
