@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import type { SshHost, VmWizardLaunchResult, VmWizardServiceStatus } from "../shared/ipc.js";
+import type { SshHost, VmWizardLaunchResult } from "../shared/ipc.js";
 import { sshExec } from "./ssh-probe.js";
 import { msg } from "./i18n.js";
 
