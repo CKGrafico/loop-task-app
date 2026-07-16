@@ -173,9 +173,8 @@ export function AddVmWizard(props: {
   }
 
   const SERVICES: ServiceDef[] = [
-    // Core (mandatory)
-    { key: "installOpenCode", nameKey: "vmWizard.serviceOpenCode", descKey: "vmWizard.serviceOpenCodeDesc", category: "core", probeField: "opencodeRunning", launchField: "openCodeStatus" },
     // AI
+    { key: "installOpenCode", nameKey: "vmWizard.serviceOpenCode", descKey: "vmWizard.serviceOpenCodeDesc", category: "ai", probeField: "opencodeRunning", launchField: "openCodeStatus" },
     { key: "installClaudeCli", nameKey: "vmWizard.serviceClaudeCli", descKey: "vmWizard.serviceClaudeCliDesc", category: "ai", probeField: "claudeInstalled", launchField: "claudeStatus" },
     // Platform CLIs
     { key: "installGh", nameKey: "vmWizard.serviceGh", descKey: "vmWizard.serviceGhDesc", category: "platform", probeField: "ghInstalled", launchField: "ghStatus" },
