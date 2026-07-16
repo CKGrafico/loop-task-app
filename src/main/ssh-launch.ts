@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import type { SshHost, VmWizardLaunchResult } from "../shared/ipc.js";
+import type { SshHost, VmWizardLaunchResult, VmWizardServiceStatus } from "../shared/ipc.js";
 import { sshExec } from "./ssh-probe.js";
 import { msg } from "./i18n.js";
 
@@ -48,7 +48,7 @@ if [ -z "$NODE_BIN" ] || [ ! -x "$NODE_BIN" ]; then
   exit 1
 fi
 
-echo "Node: $NODE_BIN ($($NODE_BIN --version))"
+echo "NODE_FOUND|\${NODE_BIN}|$($NODE_BIN --version)"
 
 # Check if loop-task daemon is already running on the expected port
 DAEMON_PORT=__DAEMON_PORT__
@@ -59,35 +59,38 @@ if ss -tlnp 2>/dev/null | grep -q ":\${DAEMON_PORT} "; then
   else
     echo "DAEMON_PORT_BUSY|\${DAEMON_PORT}"
   fi
-  # Skip daemon launch regardless — never kill/restart what we don't own
   DAEMON_SKIP=1
 fi
 
-# Install loop-task if not present
-if [ -z "$DAEMON_SKIP" ]; then
+INSTALL_LOOP_TASK="__INSTALL_LOOP_TASK__"
+if [ -n "$INSTALL_LOOP_TASK" ] && [ -z "$DAEMON_SKIP" ]; then
   if ! command -v loop-task >/dev/null 2>&1; then
-    echo "Installing loop-task..."
+    echo "LOOP_TASK_INSTALLING"
     "$NODE_BIN" -e "const { execSync } = require('child_process'); execSync('npm install -g loop-task', { stdio: 'inherit' });" 2>"$LAUNCH_DIR/install.log" || {
       echo "INSTALL_FAILED_LOOP_TASK"
       cat "$LAUNCH_DIR/install.log" 2>/dev/null
       exit 1
     }
+    echo "LOOP_TASK_INSTALLED"
   fi
 fi
 
-# Install opencode if not present
-if ! command -v opencode >/dev/null 2>&1; then
-  echo "Installing opencode..."
-  "$NODE_BIN" -e "const { execSync } = require('child_process'); execSync('npm install -g opencode', { stdio: 'inherit' });" 2>"$LAUNCH_DIR/install-oc.log" || {
-    echo "INSTALL_FAILED_OPENCODE"
-    cat "$LAUNCH_DIR/install-oc.log" 2>/dev/null
-    exit 1
-  }
+INSTALL_OPENCODE="__INSTALL_OPENCODE__"
+if [ -n "$INSTALL_OPENCODE" ]; then
+  if ! command -v opencode >/dev/null 2>&1; then
+    echo "OPENCODE_INSTALLING"
+    "$NODE_BIN" -e "const { execSync } = require('child_process'); execSync('npm install -g opencode', { stdio: 'inherit' });" 2>"$LAUNCH_DIR/install-oc.log" || {
+      echo "INSTALL_FAILED_OPENCODE"
+      cat "$LAUNCH_DIR/install-oc.log" 2>/dev/null
+      exit 1
+    }
+    echo "OPENCODE_INSTALLED"
+  fi
 fi
 
 # Start loop-task daemon (bound to loopback)
-if [ -z "$DAEMON_SKIP" ]; then
-  echo "Starting loop-task daemon on port \${DAEMON_PORT}..."
+if [ -z "$DAEMON_SKIP" ] && [ -n "$INSTALL_LOOP_TASK" ]; then
+  echo "DAEMON_STARTING|\${DAEMON_PORT}"
   nohup loop-task serve --host 127.0.0.1 --port "\${DAEMON_PORT}" > "$LAUNCH_DIR/daemon.log" 2>&1 &
   DAEMON_PID=$!
   echo "$DAEMON_PID" > "$LAUNCH_DIR/daemon.pid"
@@ -97,15 +100,17 @@ fi
 
 # Start opencode server (bound to loopback)
 OPENCODE_PORT=__OPENCODE_PORT__
-if ss -tlnp 2>/dev/null | grep -q ":\${OPENCODE_PORT} "; then
-  echo "OPENCODE_PORT_BUSY|\${OPENCODE_PORT}"
-else
-  echo "Starting opencode server on port \${OPENCODE_PORT}..."
-  nohup opencode serve --host 127.0.0.1 --port "\${OPENCODE_PORT}" > "$LAUNCH_DIR/opencode.log" 2>&1 &
-  OPENCODE_PID=$!
-  echo "$OPENCODE_PID" > "$LAUNCH_DIR/opencode.pid"
-  echo "port=\${OPENCODE_PORT}" > "$LAUNCH_DIR/opencode.info"
-  echo "OPENCODE_STARTED|\${OPENCODE_PORT}|\${OPENCODE_PID}"
+if [ -n "$INSTALL_OPENCODE" ]; then
+  if ss -tlnp 2>/dev/null | grep -q ":\${OPENCODE_PORT} "; then
+    echo "OPENCODE_PORT_BUSY|\${OPENCODE_PORT}"
+  else
+    echo "OPENCODE_STARTING|\${OPENCODE_PORT}"
+    nohup opencode serve --host 127.0.0.1 --port "\${OPENCODE_PORT}" > "$LAUNCH_DIR/opencode.log" 2>&1 &
+    OPENCODE_PID=$!
+    echo "$OPENCODE_PID" > "$LAUNCH_DIR/opencode.pid"
+    echo "port=\${OPENCODE_PORT}" > "$LAUNCH_DIR/opencode.info"
+    echo "OPENCODE_STARTED|\${OPENCODE_PORT}|\${OPENCODE_PID}"
+  fi
 fi
 
 echo "LAUNCH_DONE"
@@ -120,7 +125,14 @@ fi
 
 export async function launchOnVm(
   host: SshHost,
-  probeResult: { daemonRunning: boolean; daemonPort: number | null; opencodeRunning: boolean; opencodePort: number | null },
+  probeResult: {
+    daemonRunning: boolean;
+    daemonPort: number | null;
+    opencodeRunning: boolean;
+    opencodePort: number | null;
+    installLoopTask: boolean;
+    installOpenCode: boolean;
+  },
 ): Promise<VmWizardLaunchResult> {
   const result: VmWizardLaunchResult = {
     started: false,
@@ -128,6 +140,8 @@ export async function launchOnVm(
     opencodePort: null,
     errorDetail: null,
     logTail: null,
+    loopTaskStatus: "pending",
+    openCodeStatus: "pending",
   };
 
   const hash = hashForHost(host);
@@ -137,13 +151,24 @@ export async function launchOnVm(
   if (probeResult.daemonRunning && probeResult.daemonPort) {
     result.started = true;
     result.daemonPort = probeResult.daemonPort;
+    result.loopTaskStatus = "already-running";
     result.opencodePort = probeResult.opencodeRunning ? (probeResult.opencodePort ?? DEFAULT_OPENCODE_PORT) : opencodePort;
+    result.openCodeStatus = probeResult.opencodeRunning ? "already-running" : "pending";
+  }
+
+  if (!probeResult.installLoopTask) {
+    result.loopTaskStatus = "skipped";
+  }
+  if (!probeResult.installOpenCode) {
+    result.openCodeStatus = "skipped";
   }
 
   const script = LAUNCH_SCRIPT_TEMPLATE
     .replace(/__HASH__/g, hash)
     .replace(/__DAEMON_PORT__/g, String(daemonPort))
-    .replace(/__OPENCODE_PORT__/g, String(opencodePort));
+    .replace(/__OPENCODE_PORT__/g, String(opencodePort))
+    .replace(/__INSTALL_LOOP_TASK__/g, probeResult.installLoopTask ? "1" : "")
+    .replace(/__INSTALL_OPENCODE__/g, probeResult.installOpenCode ? "1" : "");
 
   const launchResult = await sshExec(host, script);
 
@@ -159,8 +184,10 @@ export async function launchOnVm(
         result.errorDetail = msg("vmWizard.mainNodeNotFoundOnVm");
       } else if (trimmed === "INSTALL_FAILED_LOOP_TASK") {
         result.errorDetail = msg("vmWizard.mainInstallLoopTaskFailed");
+        result.loopTaskStatus = "failed";
       } else if (trimmed === "INSTALL_FAILED_OPENCODE") {
         result.errorDetail = msg("vmWizard.mainInstallOpenCodeFailed");
+        result.openCodeStatus = "failed";
       } else if (trimmed.startsWith("DAEMON_PORT_BUSY|")) {
         result.errorDetail = msg("vmWizard.mainDaemonPortBusy", { port: daemonPort });
       } else if (trimmed.startsWith("OPENCODE_PORT_BUSY|")) {
@@ -175,12 +202,20 @@ export async function launchOnVm(
     const trimmed = line.trim();
     if (trimmed.startsWith("DAEMON_ALREADY_RUNNING|")) {
       result.daemonPort = parseInt(trimmed.split("|")[1] ?? String(daemonPort), 10);
+      result.loopTaskStatus = "already-running";
     } else if (trimmed.startsWith("DAEMON_STARTED|")) {
       result.daemonPort = parseInt(trimmed.split("|")[1] ?? String(daemonPort), 10);
+      result.loopTaskStatus = "started";
+    } else if (trimmed === "LOOP_TASK_INSTALLED") {
+      result.loopTaskStatus = "installed";
     } else if (trimmed.startsWith("OPENCODE_STARTED|")) {
       result.opencodePort = parseInt(trimmed.split("|")[1] ?? String(opencodePort), 10);
+      result.openCodeStatus = "started";
+    } else if (trimmed === "OPENCODE_INSTALLED") {
+      result.openCodeStatus = "installed";
     } else if (trimmed.startsWith("OPENCODE_PORT_BUSY|")) {
       result.opencodePort = null;
+      result.openCodeStatus = "already-running";
     }
   }
 
