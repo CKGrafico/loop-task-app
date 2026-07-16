@@ -1,26 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Environment, OpenCodeEndpoint } from "./types";
-import { apiRequest, resolveBaseUrl } from "./api";
-
-async function probeUrl(url: string): Promise<boolean> {
-  const probeEnv: Environment = {
-    id: "probe",
-    name: "probe",
-    endpoints: [{ id: "probe-ep", kind: "direct" as const, url, lastError: null, failureCount: 0 }],
-    activeEndpointId: "probe-ep",
-  };
-  const res = await apiRequest(probeEnv, "/api/loops");
-  return res.ok;
-}
+import { cid, useInject } from "inversify-hooks";
+import type { Environment, OpenCodeEndpoint, AccessEndpoint } from "./types";
+import type { EndpointKind } from "../../shared/ipc";
+import type { IConfigService } from "./services/interfaces";
 
 export function useEnvironments(): {
   environments: Environment[];
   selectedId: string | null;
   mainVm: Environment | null;
   select: (id: string | null) => void;
-  add: (name: string, baseUrl: string, kind?: "direct" | "ssh" | "tailscale") => Promise<Environment>;
+  add: (name: string, baseUrl: string, kind?: EndpointKind) => Promise<Environment>;
   remove: (id: string) => void;
-  addEndpoint: (environmentId: string, url: string, kind: "direct" | "ssh" | "tailscale") => void;
+  addEndpoint: (environmentId: string, url: string, kind: EndpointKind) => void;
   removeEndpoint: (environmentId: string, endpointId: string) => void;
   setActiveEndpoint: (environmentId: string, endpointId: string) => void;
   removeSessionToken: (environmentId: string) => void;
@@ -28,6 +19,7 @@ export function useEnvironments(): {
   setMainVm: (environmentId: string) => void;
   reload: () => Promise<void>;
 } {
+  const [configService] = useInject<IConfigService>(cid.IConfigService);
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -35,50 +27,18 @@ export function useEnvironments(): {
   const mainVm = useMemo(() => environments.find((e) => e.role === "main-vm") ?? null, [environments]);
 
   useEffect(() => {
-    if (!window.api) {
-      const raw = localStorage.getItem("lta.environments.v1");
-      if (raw) {
-        try {
-          const parsed = JSON.parse(raw) as Environment[];
-          if (Array.isArray(parsed)) setEnvironments(parsed);
-        } catch { /* empty */ }
-      } else {
-        const legacyRaw = localStorage.getItem("lta.instances.v1");
-        if (legacyRaw) {
-          try {
-            const legacyParsed = JSON.parse(legacyRaw) as Array<{ id: string; name: string; baseUrl: string }>;
-            if (Array.isArray(legacyParsed)) {
-              const migrated: Environment[] = legacyParsed.map((inst) => ({
-                id: inst.id,
-                name: inst.name,
-                endpoints: [{ id: inst.id, kind: "direct" as const, url: inst.baseUrl, lastError: null, failureCount: 0 }],
-                activeEndpointId: inst.id,
-              }));
-              setEnvironments(migrated);
-              localStorage.setItem("lta.environments.v1", JSON.stringify(migrated));
-              localStorage.removeItem("lta.instances.v1");
-            }
-          } catch { /* empty */ }
-        }
-      }
-      const sid = localStorage.getItem("lta.selectedEnvironment.v1") ?? localStorage.getItem("lta.selectedInstance.v1");
-      if (sid) setSelectedId(sid);
-      setLoaded(true);
-      return;
-    }
-
     const migrateAndLoad = async (): Promise<void> => {
       const rawInstances = localStorage.getItem("lta.instances.v1");
       if (rawInstances) {
         const rawSelectedId = localStorage.getItem("lta.selectedInstance.v1");
-        await window.api.config.migrateFromLocalStorage(rawInstances, rawSelectedId);
+        await configService.migrateFromLocalStorage(rawInstances, rawSelectedId);
         localStorage.removeItem("lta.instances.v1");
         localStorage.removeItem("lta.selectedInstance.v1");
       }
 
       const [loadedEnvs, loadedId] = await Promise.all([
-        window.api.config.getEnvironments(),
-        window.api.config.getSelectedEnvironmentId(),
+        configService.getEnvironments(),
+        configService.getSelectedEnvironmentId(),
       ]);
       setEnvironments(loadedEnvs);
       setSelectedId(loadedId);
@@ -86,240 +46,98 @@ export function useEnvironments(): {
     };
 
     void migrateAndLoad();
-  }, []);
+  }, [configService]);
 
   const select = useCallback(
     (id: string | null) => {
       setSelectedId(id);
-      if (window.api) {
-        void window.api.config.setSelectedEnvironmentId(id).catch(() => {});
-      } else {
-        if (id) localStorage.setItem("lta.selectedEnvironment.v1", id);
-        else localStorage.removeItem("lta.selectedEnvironment.v1");
-      }
+      void configService.setSelectedEnvironmentId(id).catch(() => {});
     },
-    [],
+    [configService],
   );
 
-  const add = useCallback(async (name: string, baseUrl: string, kind?: "direct" | "ssh" | "tailscale"): Promise<Environment> => {
+  const add = useCallback(async (name: string, baseUrl: string, kind?: EndpointKind): Promise<Environment> => {
     const trimmedUrl = baseUrl.trim().replace(/\/+$/, "");
-
-    if (window.api) {
-      const env = await window.api.config.addEnvironment(name, trimmedUrl, kind);
-      setEnvironments(await window.api.config.getEnvironments());
-      return env;
-    }
-
-    for (const env of environments) {
-      const canReach = await probeUrl(trimmedUrl);
-      if (canReach) {
-        for (const ep of env.endpoints) {
-          const epReachable = await probeUrl(ep.url);
-          if (epReachable) {
-            addEndpointFn(env.id, trimmedUrl, kind ?? "direct");
-            return env;
-          }
-        }
-      }
-    }
-
-    const endpointId = crypto.randomUUID().slice(0, 8);
-    const env: Environment = {
-      id: crypto.randomUUID().slice(0, 8),
-      name: name.trim(),
-      endpoints: [{
-        id: endpointId,
-        kind: kind ?? "direct",
-        url: trimmedUrl,
-        lastError: null,
-        failureCount: 0,
-      }],
-      activeEndpointId: endpointId,
-    };
-    setEnvironments((prev) => {
-      const next = [...prev, env];
-      localStorage.setItem("lta.environments.v1", JSON.stringify(next));
-      return next;
-    });
+    const env = await configService.addEnvironment(name, trimmedUrl, kind);
+    setEnvironments(await configService.getEnvironments());
     return env;
-  }, [environments]);
+  }, [configService]);
 
   const remove = useCallback(
     (id: string) => {
-      if (window.api) {
-        void window.api.config.removeEnvironment(id).then(async () => {
-          setEnvironments(await window.api.config.getEnvironments());
-          setSelectedId(await window.api.config.getSelectedEnvironmentId());
-        }).catch(() => {});
-      } else {
-        setEnvironments((prev) => {
-          const next = prev.filter((e) => e.id !== id);
-          localStorage.setItem("lta.environments.v1", JSON.stringify(next));
-          return next;
-        });
-        setSelectedId((prev) => (prev === id ? null : prev));
-      }
+      void configService.removeEnvironment(id).then(async () => {
+        setEnvironments(await configService.getEnvironments());
+        setSelectedId(await configService.getSelectedEnvironmentId());
+      }).catch(() => {});
     },
-    [],
+    [configService],
   );
 
   const addEndpointFn = useCallback(
-    (environmentId: string, url: string, kind: "direct" | "ssh" | "tailscale") => {
-      if (window.api) {
-        void window.api.config.addEndpoint(environmentId, url, kind).then(async () => {
-          setEnvironments(await window.api.config.getEnvironments());
-        }).catch(() => {});
-      } else {
-        setEnvironments((prev) => {
-          const next = prev.map((env) => {
-            if (env.id !== environmentId) return env;
-            return {
-              ...env,
-              endpoints: [...env.endpoints, {
-                id: crypto.randomUUID().slice(0, 8),
-                kind,
-                url: url.trim().replace(/\/+$/, ""),
-                lastError: null,
-                failureCount: 0,
-              }],
-            };
-          });
-          localStorage.setItem("lta.environments.v1", JSON.stringify(next));
-          return next;
-        });
-      }
+    (environmentId: string, url: string, kind: EndpointKind) => {
+      void configService.addEndpoint(environmentId, url, kind).then(async () => {
+        setEnvironments(await configService.getEnvironments());
+      }).catch(() => {});
     },
-    [],
+    [configService],
   );
 
   const removeEndpointFn = useCallback(
     (environmentId: string, endpointId: string) => {
-      if (window.api) {
-        void window.api.config.removeEndpoint(environmentId, endpointId).then(async () => {
-          setEnvironments(await window.api.config.getEnvironments());
-        }).catch(() => {});
-      } else {
-        setEnvironments((prev) => {
-          const next = prev.map((env) => {
-            if (env.id !== environmentId) return env;
-            const filtered = env.endpoints.filter((ep) => ep.id !== endpointId);
-            return {
-              ...env,
-              endpoints: filtered,
-              activeEndpointId: env.activeEndpointId === endpointId
-                ? (filtered.length > 0 ? filtered[0].id : null)
-                : env.activeEndpointId,
-            };
-          });
-          localStorage.setItem("lta.environments.v1", JSON.stringify(next));
-          return next;
-        });
-      }
+      void configService.removeEndpoint(environmentId, endpointId).then(async () => {
+        setEnvironments(await configService.getEnvironments());
+      }).catch(() => {});
     },
-    [],
+    [configService],
   );
 
   const setActiveEndpointFn = useCallback(
     (environmentId: string, endpointId: string) => {
-      if (window.api) {
-        void window.api.config.setActiveEndpoint(environmentId, endpointId).then(async () => {
-          setEnvironments(await window.api.config.getEnvironments());
-        }).catch(() => {});
-      } else {
-        setEnvironments((prev) => {
-          const next = prev.map((env) => {
-            if (env.id !== environmentId) return env;
-            return { ...env, activeEndpointId: endpointId };
-          });
-          localStorage.setItem("lta.environments.v1", JSON.stringify(next));
-          return next;
-        });
-      }
+      void configService.setActiveEndpoint(environmentId, endpointId).then(async () => {
+        setEnvironments(await configService.getEnvironments());
+      }).catch(() => {});
     },
-    [],
+    [configService],
   );
 
   const removeSessionTokenFn = useCallback(
     (environmentId: string) => {
-      if (window.api) {
-        void window.api.config.removeSessionToken(environmentId).then(async () => {
-          setEnvironments(await window.api.config.getEnvironments());
-        }).catch(() => {});
-      }
+      void configService.removeSessionToken(environmentId).then(async () => {
+        setEnvironments(await configService.getEnvironments());
+      }).catch(() => {});
     },
-    [],
+    [configService],
   );
 
   const setOpenCodeEndpointFn = useCallback(
     (environmentId: string, url: string, password: string | null) => {
-      if (window.api) {
-        const endpoint: OpenCodeEndpoint = { url: url.trim().replace(/\/+$/, ""), password };
-        void window.api.config.setOpenCodeEndpoint(environmentId, endpoint).then(async () => {
-          setEnvironments(await window.api.config.getEnvironments());
-        }).catch(() => {});
-      } else {
-        setEnvironments((prev) => {
-          const next = prev.map((env) => {
-            if (env.id !== environmentId) return env;
-            return { ...env, opencode: { url: url.trim().replace(/\/+$/, ""), password } };
-          });
-          localStorage.setItem("lta.environments.v1", JSON.stringify(next));
-          return next;
-        });
-      }
+      const endpoint: OpenCodeEndpoint = { url: url.trim().replace(/\/+$/, ""), password };
+      void configService.setOpenCodeEndpoint(environmentId, endpoint).then(async () => {
+        setEnvironments(await configService.getEnvironments());
+      }).catch(() => {});
     },
-    [],
+    [configService],
   );
 
   const setMainVmFn = useCallback(
     (environmentId: string) => {
-      if (window.api) {
-        void window.api.config.setMainVm(environmentId).then(async () => {
-          setEnvironments(await window.api.config.getEnvironments());
-        }).catch(() => {});
-      } else {
-        setEnvironments((prev) => {
-          const next = prev.map((env) => ({
-            ...env,
-            role: env.id === environmentId ? "main-vm" : "coding",
-          }));
-          localStorage.setItem("lta.environments.v1", JSON.stringify(next));
-          return next;
-        });
-      }
+      void configService.setMainVm(environmentId).then(async () => {
+        setEnvironments(await configService.getEnvironments());
+      }).catch(() => {});
     },
-    [],
+    [configService],
   );
 
   const reloadFn = useCallback(async () => {
-    if (!window.api) return;
     const [envs, sid] = await Promise.all([
-      window.api.config.getEnvironments(),
-      window.api.config.getSelectedEnvironmentId(),
+      configService.getEnvironments(),
+      configService.getSelectedEnvironmentId(),
     ]);
     setEnvironments(envs);
     setSelectedId(sid);
-  }, []);
+  }, [configService]);
 
-  if (!loaded) {
-    return {
-      environments: [],
-      selectedId: null,
-      mainVm: null,
-      select,
-      add,
-      remove,
-      addEndpoint: addEndpointFn,
-      removeEndpoint: removeEndpointFn,
-      setActiveEndpoint: setActiveEndpointFn,
-      removeSessionToken: removeSessionTokenFn,
-      setOpenCodeEndpoint: setOpenCodeEndpointFn,
-      setMainVm: setMainVmFn,
-      reload: reloadFn,
-    };
-  }
-
-  return {
+  const result = {
     environments,
     selectedId,
     mainVm,
@@ -334,4 +152,10 @@ export function useEnvironments(): {
     setMainVm: setMainVmFn,
     reload: reloadFn,
   };
+
+  if (!loaded) {
+    return { ...result, environments: [], selectedId: null, mainVm: null };
+  }
+
+  return result;
 }
