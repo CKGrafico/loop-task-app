@@ -118,12 +118,21 @@ export function AddVmWizard(props: {
     onCancel();
   };
 
+  const handleDoneFinal = (): void => {
+    if (!doneResult) return;
+    if (setAsMain && window.api) {
+      void window.api.config.setMainVm(doneResult.environmentId);
+    }
+    onDone(doneResult.environmentId, doneResult.environmentName, doneResult.daemonUrl);
+  };
+
   const currentStep = progress?.step ?? "idle";
   const isDone = currentStep === "done";
   const isError = currentStep === "error";
   const isConsent = currentStep === "consent";
   const isPickServices = currentStep === "pick-services";
   const isInstalling = currentStep === "installing";
+  const [setAsMain, setSetAsMain] = useState(true);
 
   function serviceStatusIcon(status: VmWizardServiceStatus): React.ReactNode {
     switch (status) {
@@ -210,7 +219,7 @@ export function AddVmWizard(props: {
 
   return (
     <div className="modal-backdrop" onClick={handleCancel}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 760 }}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 860 }}>
         <h2>{intl.formatMessage({ id: "vmWizard.title" })}</h2>
         <p style={{ fontSize: 12.5, color: "var(--text-secondary)", margin: "4px 0 14px" }}>
           {intl.formatMessage({ id: "vmWizard.description" })}
@@ -359,7 +368,7 @@ export function AddVmWizard(props: {
                 <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-muted)", marginBottom: 6 }}>
                   {intl.formatMessage({ id: CATEGORY_KEYS[category as ServiceCategory] })}
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 16px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px 16px" }}>
                   {services.map((svc) => {
                     const installed = isServiceInstalled(svc);
                     return (
@@ -397,16 +406,7 @@ export function AddVmWizard(props: {
                 </div>
               </div>
             ))}
-
-            <div style={{ marginTop: 14 }}>
-              <button
-                className="btn primary"
-                onClick={() => window.api?.vmWizard.respondServiceSelection(serviceSelection)}
-              >
-                {intl.formatMessage({ id: "vmWizard.confirmServices" })}
-              </button>
-            </div>
-          </div>
+        </div>
         ) : null}
 
         {isInstalling && progress?.launch ? (
@@ -490,11 +490,39 @@ export function AddVmWizard(props: {
           </div>
         ) : null}
 
+        {isDone && doneResult ? (
+          <div style={{ marginTop: 12, padding: 12, background: "var(--bg-log)", borderRadius: 8, border: "1px solid var(--bg-active)" }}>
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={setAsMain}
+                onChange={(e) => setSetAsMain(e.target.checked)}
+                style={{ marginTop: 2 }}
+              />
+              <div>
+                <div style={{ fontSize: 12.5, fontWeight: 500 }}>
+                  {intl.formatMessage({ id: "vmWizard.setAsMain" })}
+                </div>
+                <div style={{ fontSize: 11.5, color: "var(--text-muted)", lineHeight: 1.4 }}>
+                  {intl.formatMessage({ id: "vmWizard.setAsMainDesc" })}
+                </div>
+              </div>
+            </label>
+          </div>
+        ) : null}
+
         <div className="modal-actions">
-          <button className="btn" onClick={() => doneResult ? onDone(doneResult.environmentId, doneResult.environmentName, doneResult.daemonUrl) : handleCancel()}>
+          <button className="btn" onClick={() => doneResult ? handleDoneFinal() : handleCancel()}>
             {running ? intl.formatMessage({ id: "vmWizard.cancel" }) : intl.formatMessage({ id: "vmWizard.close" })}
           </button>
-          {!isDone ? (
+          {isPickServices ? (
+            <button
+              className="btn primary"
+              onClick={() => window.api?.vmWizard.respondServiceSelection(serviceSelection)}
+            >
+              {intl.formatMessage({ id: "vmWizard.confirmServices" })}
+            </button>
+          ) : !isDone ? (
             <button
               className="btn primary"
               onClick={() => void startWizard()}
