@@ -45,7 +45,7 @@ import {
 } from "./connection-supervisor.js";
 import { fetchPeers } from "./tailscale.js";
 import { getOpenCodeStatus, refreshOpenCodeStatus, clearOpenCodeStatus } from "./opencode-client.js";
-import { listSshHosts as vmListSshHosts, runWizard, cancelWizard, respondConsent } from "./vm-wizard.js";
+import { listSshHosts as vmListSshHosts, runWizard, cancelWizard, respondConsent, respondServiceSelection } from "./vm-wizard.js";
 import { msg } from "./i18n.js";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -514,6 +514,10 @@ app.whenReady().then(() => {
 
   ipcMain.handle("vmWizard:respondConsent", (_event, decision: "install" | "skip") => {
     respondConsent(decision);
+  });
+
+  ipcMain.handle("vmWizard:respondServiceSelection", (_event, selection) => {
+    respondServiceSelection(selection);
   });
 
   ipcMain.handle("opencode:getStatus", (_event, environmentId: string): OpenCodeConnectionStatus => {

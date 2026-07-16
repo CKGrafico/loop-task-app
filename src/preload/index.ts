@@ -13,6 +13,7 @@ import type {
   OpenCodeEndpoint,
   VmWizardProgress,
   VmWizardResult,
+  VmWizardServiceSelection,
   SshHost,
   InfraActionArgs,
   InfraActionResult,
@@ -147,6 +148,8 @@ const bridge: LoopTaskBridge = {
       ipcRenderer.invoke("vmWizard:cancel") as Promise<void>,
     respondConsent: (decision: "install" | "skip") =>
       ipcRenderer.invoke("vmWizard:respondConsent", decision) as Promise<void>,
+    respondServiceSelection: (selection: VmWizardServiceSelection) =>
+      ipcRenderer.invoke("vmWizard:respondServiceSelection", selection) as Promise<void>,
   },
 
   infra: {
