@@ -64,7 +64,7 @@ function getOrCreateSupervisor(environmentId: string, baseUrl: string): Connecti
     (status: ConnectionStatus) => {
       const win = BrowserWindow.getAllWindows()[0];
       if (win && !win.isDestroyed()) {
-        win.webContents.send("connection:status", { environmentId, status });
+        win.webContents.send("connection:status", environmentId, status);
       }
     },
   );
@@ -83,7 +83,7 @@ function syncEndpointTracker(environmentId: string): void {
     tracker = new EndpointHealthTracker(environmentId, (health) => {
       const win = BrowserWindow.getAllWindows()[0];
       if (win && !win.isDestroyed()) {
-        win.webContents.send("connection:endpointHealth", { environmentId, health });
+        win.webContents.send("connection:endpointHealth", environmentId, health);
       }
     });
     endpointTrackers.set(environmentId, tracker);

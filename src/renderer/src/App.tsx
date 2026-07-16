@@ -16,6 +16,7 @@ import { InfraChatPanel } from "./components/InfraChatPanel";
 import { AddVmWizard } from "./components/AddVmWizard";
 import { LoopDetail } from "./components/LoopDetail";
 import { PickMainVmModal } from "./components/PickMainVmModal";
+import { ProjectsView } from "./components/ProjectsView";
 import { hostLabel, timeAgo } from "./format";
 import { translateMessage, standaloneIntl } from "./i18n";
 
