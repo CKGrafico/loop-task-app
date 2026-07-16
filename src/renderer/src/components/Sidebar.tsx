@@ -1,9 +1,10 @@
+import { useState } from "react";
 import { useIntl, type IntlShape } from "react-intl";
 import type { ConnectionStatus, EndpointHealth } from "../../../shared/ipc";
 import type { Environment, EnvironmentHealth, AccessEndpoint, OpenCodeConnectionStatus, OpenCodeAuthState } from "../types";
 import type { FleetItemStatus } from "../fleet-status";
 import { getPillLabel } from "../fleet-status";
-import { Terminal, RotateCw, X, Bell, BellOff } from "lucide-react";
+import { Terminal, RotateCw, X, Bell, BellOff, Plus } from "lucide-react";
 import { UnreadDot } from "./StatusPill";
 import { OrbionMark } from "./OrbionMark";
 import { translateMessage } from "../i18n";
@@ -73,26 +74,40 @@ export function Sidebar(props: {
 }): React.ReactNode {
   const { environments, selectedId, health, connectionStatus, endpointHealth, openCodeStatus, fleetStatus, unreadEnvs, mutedEnvs, onToggleMute, onSelect, onAddVm, onRemove, onRetry, onSetEndpoint } = props;
   const intl = useIntl();
+  const [filterId, setFilterId] = useState<string>("");
+
+  const visibleEnvs = filterId ? environments.filter((e) => e.id === filterId) : environments;
 
   return (
     <div className="sidebar">
-      <button className="sidebar-action" onClick={onAddVm}>
-        <Terminal size={14} />
-        <span>{intl.formatMessage({ id: "sidebar.addEnvironment" })}</span>
-      </button>
+      <div className="sidebar-top">
+        <select
+          className="sidebar-filter"
+          value={filterId}
+          onChange={(e) => setFilterId(e.target.value)}
+        >
+          <option value="">{intl.formatMessage({ id: "sidebar.allEnvironments" })}</option>
+          {environments.map((env) => (
+            <option key={env.id} value={env.id}>{env.name}</option>
+          ))}
+        </select>
+        <button className="sidebar-add" title={intl.formatMessage({ id: "sidebar.addEnvironment" })} onClick={onAddVm}>
+          <Plus size={14} />
+        </button>
+      </div>
 
       <div className="sidebar-section">
         <span className="overline">{intl.formatMessage({ id: "sidebar.environments" })}</span>
-        <span className="overline">{environments.length || ""}</span>
+        <span className="overline">{visibleEnvs.length || ""}</span>
       </div>
 
       <div className="sidebar-list">
-        {environments.length === 0 ? (
+        {visibleEnvs.length === 0 ? (
           <div style={{ padding: "6px 10px", fontSize: 12.5, color: "var(--text-muted)" }}>
             {intl.formatMessage({ id: "sidebar.noEnvironments" })}
           </div>
         ) : (
-          environments.map((env) => {
+          visibleEnvs.map((env) => {
             const h = health[env.id] ?? "unknown";
             const cs = connectionStatus?.[env.id];
             const epHealth = endpointHealth?.[env.id];
