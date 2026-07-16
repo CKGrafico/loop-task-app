@@ -49,6 +49,7 @@ export function AddVmWizard(props: {
   const [hostsLoaded, setHostsLoaded] = useState(false);
   const [progress, setProgress] = useState<VmWizardProgress | null>(null);
   const [running, setRunning] = useState(false);
+  const [doneResult, setDoneResult] = useState<{ environmentId: string; environmentName: string; daemonUrl: string } | null>(null);
 
   useEffect(() => {
     if (!window.api) return;
@@ -84,7 +85,7 @@ export function AddVmWizard(props: {
 
     try {
       const result = await window.api!.vmWizard.startWizard(trimmed, envName.trim() || undefined);
-      onDone(result.environmentId, result.environmentName, result.daemonUrl);
+      setDoneResult(result);
     } catch {
       // progress already set via onProgress
     }
@@ -252,7 +253,7 @@ export function AddVmWizard(props: {
         ) : null}
 
         <div className="modal-actions">
-          <button className="btn" onClick={handleCancel} disabled={false}>
+          <button className="btn" onClick={() => doneResult ? onDone(doneResult.environmentId, doneResult.environmentName, doneResult.daemonUrl) : handleCancel()}>
             {running ? intl.formatMessage({ id: "vmWizard.cancel" }) : intl.formatMessage({ id: "vmWizard.close" })}
           </button>
           {!isDone ? (

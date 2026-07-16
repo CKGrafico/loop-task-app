@@ -302,10 +302,15 @@ export async function runWizard(target: string, name?: string): Promise<VmWizard
       pair.errorDetail = msg("vmWizard.mainPairingExchangeFailed");
     }
   }
-  // If remoteCode is null the daemon doesn't support pairing yet — not a fatal
-  // error. The environment is still accessible; we just won't have a session token.
+  // remoteCode null = daemon doesn't support pairing yet. Not fatal — env is still accessible.
 
-  emitProgress({ step: "pairing", message: pair.paired ? msg("vmWizard.mainPaired") : msg("vmWizard.mainPairingFailed"), probe, launch, tunnel, pair });
+  if (remoteCode && !pair.paired) {
+    // Pairing was attempted but failed — show the failure before continuing.
+    emitProgress({ step: "pairing", message: msg("vmWizard.mainPairingFailed"), probe, launch, tunnel, pair });
+  } else if (pair.paired) {
+    emitProgress({ step: "pairing", message: msg("vmWizard.mainPaired"), probe, launch, tunnel, pair });
+  }
+  // If no remoteCode, skip pairing progress entirely.
 
   // Step 5: Save environment
   const env = addEnvironment(envName, daemonUrl, "ssh");
