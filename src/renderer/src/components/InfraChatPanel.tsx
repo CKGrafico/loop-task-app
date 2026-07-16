@@ -1,7 +1,9 @@
 import React, { lazy, Suspense, useCallback, useRef, useState } from "react";
 import { useIntl, type IntlShape } from "react-intl";
+import { cid, useInject } from "inversify-hooks";
 import type { ChatTurn, AccessMode } from "../types";
 import type { InfraActionArgs, MachineStatusEntry } from "../../../shared/ipc";
+import type { IInfraService } from "../services/interfaces";
 import { useTranscript } from "../chat/useTranscript";
 import { ChatComposer } from "../chat/ChatComposer";
 
@@ -33,6 +35,7 @@ function formatMachineStatusReport(intl: IntlShape, data: unknown): string {
 
 export function InfraChatPanel({ mainVmId, mainVmName }: InfraChatPanelProps): React.ReactNode {
   const intl = useIntl();
+  const [infraService] = useInject<IInfraService>(cid.IInfraService);
   const {
     turns,
     rows,
@@ -91,8 +94,8 @@ export function InfraChatPanel({ mainVmId, mainVmName }: InfraChatPanelProps): R
         action = { action: "clone-repo", params: { repoUrl: repoMatch?.[1] ?? "" } };
       }
 
-      if (action && window.api) {
-        void window.api.infra.executeAction(action).then((result) => {
+      if (action) {
+        void infraService.executeAction(action).then((result) => {
           if (!result) return;
           let responseText: string;
           if (result.ok) {
