@@ -455,8 +455,8 @@ export function App(): React.ReactNode {
 
               {activeEndpoint ? (() => {
                 // For SSH endpoints: show the real host from sshTarget (strip user@ prefix).
-                // For direct/tailscale: show the URL host — that IS the real IP.
-                // Never show 127.0.0.1 (tunnel localhost — not meaningful to the user).
+                // For direct/tailscale: show the URL host, that IS the real IP.
+                // Never show 127.0.0.1 (tunnel localhost, not meaningful to the user).
                 let label: string | null = null;
                 if (activeEndpoint.sshTarget) {
                   // "user@host:port" or "user@host" → extract just the host part
@@ -464,7 +464,7 @@ export function App(): React.ReactNode {
                   label = m ? m[1] : activeEndpoint.sshTarget;
                 } else {
                   const h = hostLabel(activeEndpoint.url);
-                  // suppress tunnel localhost — meaningless to display
+                  // suppress tunnel localhost, meaningless to display
                   if (!h.startsWith("127.0.0.1") && !h.startsWith("localhost")) {
                     label = h;
                   }

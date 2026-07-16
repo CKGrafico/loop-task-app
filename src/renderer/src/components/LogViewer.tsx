@@ -63,7 +63,7 @@ export function LogViewer(props: { instance: Environment; loopId: string }): Rea
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      // clipboard unavailable — ignore
+      // clipboard unavailable, ignore
     }
   };
 

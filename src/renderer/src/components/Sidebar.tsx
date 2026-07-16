@@ -134,7 +134,7 @@ export function Sidebar(props: {
                       <span className="env-badge env-badge-main">{intl.formatMessage({ id: "sidebar.main" })}</span>
                     ) : null}
 
-                    {/* Badges — visible on hover */}
+                    {/* Badges, visible on hover */}
                     <div className="env-badges">
                       {activeEp?.kind === "ssh" ? (
                         <span className="env-badge" title={intl.formatMessage({ id: "sidebar.badgeSsh" })}>SSH</span>
@@ -158,7 +158,7 @@ export function Sidebar(props: {
                       ) : null}
                     </div>
 
-                    {/* Action buttons — on hover */}
+                    {/* Action buttons, on hover */}
                     <div className="env-actions">
                       {(h === "backoff" || h === "blocked") && onRetry ? (
                         <span className="remove" role="button" title={intl.formatMessage({ id: "sidebar.retryConnection" })}
@@ -201,7 +201,7 @@ export function Sidebar(props: {
                           className={`instance-item${ep.id === env.activeEndpointId ? " selected" : ""}`}
                           style={{ fontSize: 11, opacity: ep.id === env.activeEndpointId ? 1 : 0.6, padding: "3px 10px" }}
                           onClick={(e) => { e.stopPropagation(); onSetEndpoint?.(env.id, ep.id); }}
-                          title={epH?.lastError ? `${endpointLabel(intl, ep)} — ${translateMessage(intl, epH.lastError)}` : endpointLabel(intl, ep)}
+                          title={epH?.lastError ? `${endpointLabel(intl, ep)}, ${translateMessage(intl, epH.lastError)}` : endpointLabel(intl, ep)}
                         >
                           <span className="dot" style={{
                             background: ep.id === env.activeEndpointId ? "var(--accent-blue)"

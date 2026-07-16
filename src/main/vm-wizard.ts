@@ -321,7 +321,7 @@ export async function runWizard(target: string, name?: string): Promise<VmWizard
   const daemonPort = launch.daemonPort ?? 8845;
   const opencodePort = launch.opencodePort;
 
-  // Step 3: Forward SSH tunnel (daemon binds 127.0.0.1 on the VM — tunnel is required)
+  // Step 3: Forward SSH tunnel (daemon binds 127.0.0.1 on the VM, tunnel is required)
   if (wizardCancelled) {
     emitProgress({ step: "error", message: msg("vmWizard.mainWizardCancelled") });
     throw new Error("vmWizard.mainCancelled");
@@ -374,10 +374,10 @@ export async function runWizard(target: string, name?: string): Promise<VmWizard
       pair.errorDetail = msg("vmWizard.mainPairingExchangeFailed");
     }
   }
-  // remoteCode null = daemon doesn't support pairing yet. Not fatal — env is still accessible.
+  // remoteCode null = daemon doesn't support pairing yet. Not fatal, env is still accessible.
 
   if (remoteCode && !pair.paired) {
-    // Pairing was attempted but failed — show the failure before continuing.
+    // Pairing was attempted but failed, show the failure before continuing.
     emitProgress({ step: "pairing", message: msg("vmWizard.mainPairingFailed"), probe, launch, tunnel, pair });
   } else if (pair.paired) {
     emitProgress({ step: "pairing", message: msg("vmWizard.mainPaired"), probe, launch, tunnel, pair });

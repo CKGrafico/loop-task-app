@@ -1,4 +1,4 @@
-/* Orbion — design tokens: deep navy frame, floating rounded panels,
+/* Orbion, design tokens: deep navy frame, floating rounded panels,
    hairline borders, soft lime accent used sparingly, quiet chrome,
    uppercase tracked section labels, mono stats in lists. */
 
@@ -118,7 +118,7 @@ input {
   background: transparent;
 }
 
-/* Small uppercase tracked labels — section headers everywhere. */
+/* Small uppercase tracked labels, section headers everywhere. */
 .overline {
   font-size: 11px;
   font-weight: 600;

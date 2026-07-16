@@ -333,7 +333,7 @@ export function AddVmWizard(props: {
             {/* Mandatory: Node.js + loop-task */}
             <div style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-muted)", marginBottom: 6 }}>
-                {intl.formatMessage({ id: "vmWizard.categoryCore" })} — {intl.formatMessage({ id: "vmWizard.mandatoryLabel" })}
+                {intl.formatMessage({ id: "vmWizard.categoryCore" })}, {intl.formatMessage({ id: "vmWizard.mandatoryLabel" })}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, opacity: 0.7 }}>
@@ -420,7 +420,7 @@ export function AddVmWizard(props: {
                 {serviceStatusIcon(progress.launch.loopTaskStatus)}
                 <span>{intl.formatMessage({ id: "vmWizard.serviceLoopTask" })}</span>
                 {progress.launch.loopTaskStatus !== "pending" ? (
-                  <span style={{ color: "var(--text-muted)", fontSize: 11 }}>— {serviceStatusLabel(progress.launch.loopTaskStatus)}</span>
+                  <span style={{ color: "var(--text-muted)", fontSize: 11 }}>, {serviceStatusLabel(progress.launch.loopTaskStatus)}</span>
                 ) : null}
               </div>
 
@@ -447,7 +447,7 @@ export function AddVmWizard(props: {
                           {serviceStatusIcon(status)}
                           <span>{intl.formatMessage({ id: svc.nameKey })}</span>
                           {status !== "pending" ? (
-                            <span style={{ color: "var(--text-muted)", fontSize: 11 }}>— {serviceStatusLabel(status)}</span>
+                            <span style={{ color: "var(--text-muted)", fontSize: 11 }}>, {serviceStatusLabel(status)}</span>
                           ) : null}
                         </div>
                       );

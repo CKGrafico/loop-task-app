@@ -20,10 +20,10 @@ license: MIT
 
 ## File Organization
 
-- **One responsibility per file — no god-files, no dumping grounds.** Never create files named `constants.ts`, `types.ts`, `config.ts`, `utils.ts`, `helpers.ts`, or similar catch-alls that collect unrelated items from different domains. If a file imports from 5+ unrelated modules it is a sign it must be split. Split by domain or feature instead (e.g. `loop-types.ts`, `env-config.ts`, `ssh-utils.ts`, `wizard-constants.ts`). Evidence: ARCHITECTURE.md §1 shows clear per-concern file names (`config-store.ts`, `connection-supervisor.ts`, `vm-wizard.ts`, `ssh-probe.ts`).
-- **Renderer follows Feature-Sliced Design (FSD).** The `src/renderer/src/` tree is organised into FSD layers: `app/` → `pages/` → `widgets/` → `features/` → `entities/` → `shared/`. Upper layers may import from lower layers only — never the reverse. `shared/` holds truly cross-cutting UI primitives (design tokens, i18n helpers, generic hooks). Domain logic lives in `entities/` or `features/`, never in `shared/`. Evidence: `frontend-engineer.md` description; `@feature-sliced-design` skill installed.
+- **One responsibility per file, no god-files, no dumping grounds.** Never create files named `constants.ts`, `types.ts`, `config.ts`, `utils.ts`, `helpers.ts`, or similar catch-alls that collect unrelated items from different domains. If a file imports from 5+ unrelated modules it is a sign it must be split. Split by domain or feature instead (e.g. `loop-types.ts`, `env-config.ts`, `ssh-utils.ts`, `wizard-constants.ts`). Evidence: ARCHITECTURE.md §1 shows clear per-concern file names (`config-store.ts`, `connection-supervisor.ts`, `vm-wizard.ts`, `ssh-probe.ts`).
+- **Renderer follows Feature-Sliced Design (FSD).** The `src/renderer/src/` tree is organised into FSD layers: `app/` → `pages/` → `widgets/` → `features/` → `entities/` → `shared/`. Upper layers may import from lower layers only, never the reverse. `shared/` holds truly cross-cutting UI primitives (design tokens, i18n helpers, generic hooks). Domain logic lives in `entities/` or `features/`, never in `shared/`. Evidence: `frontend-engineer.md` description; `@feature-sliced-design` skill installed.
 - **Keep components small and single-purpose.** A component file that exceeds ~200 lines is a signal it is doing too much. Extract sub-components, custom hooks, or utility functions into separate files within the same FSD slice. Evidence: FSD conventions; `@react-render-optimization` skill; project history shows large components being split.
-- **Domain types live in `src/renderer/src/types.ts` or `src/shared/ipc.ts`.** Types mirrored from the loop-task daemon (`LoopMeta`, `RunRecord`, `Project`, `TaskDefinition`, `LoopStatus`) go in `types.ts`. Types shared across process boundaries go in `ipc.ts`. Do not duplicate type definitions across layers — re-export from the canonical location. Evidence: `types.ts` re-exports from `ipc.ts` rather than redefining.
+- **Domain types live in `src/renderer/src/types.ts` or `src/shared/ipc.ts`.** Types mirrored from the loop-task daemon (`LoopMeta`, `RunRecord`, `Project`, `TaskDefinition`, `LoopStatus`) go in `types.ts`. Types shared across process boundaries go in `ipc.ts`. Do not duplicate type definitions across layers, re-export from the canonical location. Evidence: `types.ts` re-exports from `ipc.ts` rather than redefining.
 - **Formatting helpers are pure functions in `src/renderer/src/format.ts`.** Time/label/status formatting (`timeAgo`, `timeUntil`, `commandLine`, `hostLabel`, `STATUS_COLORS`) must remain pure and side-effect-free. Evidence: ARCHITECTURE.md §3.3.
 
 ## Naming Conventions
@@ -36,13 +36,14 @@ license: MIT
 
 ## Code Style
 
-- **Strict TypeScript — no `any`.** Both `tsconfig.web.json` and `tsconfig.node.json` set `"strict": true`, `"noUnusedLocals": true`, `"noUnusedParameters": true`, `"forceConsistentCasingInFileNames": true`. Evidence: tsconfig files.
+- **Strict TypeScript, no `any`.** Both `tsconfig.web.json` and `tsconfig.node.json` set `"strict": true`, `"noUnusedLocals": true`, `"noUnusedParameters": true`, `"forceConsistentCasingInFileNames": true`. Evidence: tsconfig files.
 - **ESM only.** Both tsconfigs use `"module": "ESNext"`, `"moduleResolution": "bundler"`. Imports in main/preload use `.js` extensions (e.g. `import { msg } from "./i18n.js"`) following the ESM convention. Evidence: `src/main/config-store.ts` line 3; `src/main/index.ts` imports.
-- **No CSS framework — plain CSS with custom-property design tokens.** Styling uses `src/renderer/src/theme.css` with CSS custom properties. Do not introduce Tailwind, CSS-in-JS, or styled-components without team alignment (openspec/config.yaml notes the team is considering adopting Tailwind + shadcn). Evidence: ARCHITECTURE.md §7; DESIGN.md frontmatter `components` section.
-- **All user-facing copy must go through i18n keys — no magic strings.** The main process uses `msg(key, params)` to create `I18nMessage` objects; the renderer uses `react-intl` `formatMessage` / `translateMessage()`. Never hardcode user-facing text in components. Evidence: openspec/config.yaml rules; `src/main/i18n.ts`; `src/renderer/src/i18n/index.ts`.
+- **No CSS framework, plain CSS with custom-property design tokens.** Styling uses `src/renderer/src/theme.css` with CSS custom properties. Do not introduce Tailwind, CSS-in-JS, or styled-components without team alignment (openspec/config.yaml notes the team is considering adopting Tailwind + shadcn). Evidence: ARCHITECTURE.md §7; DESIGN.md frontmatter `components` section.
+- **All user-facing copy must go through i18n keys, no magic strings.** The main process uses `msg(key, params)` to create `I18nMessage` objects; the renderer uses `react-intl` `formatMessage` / `translateMessage()`. Never hardcode user-facing text in components. Evidence: openspec/config.yaml rules; `src/main/i18n.ts`; `src/renderer/src/i18n/index.ts`.
 - **Function components + hooks only.** No class components. React 19 function components with hooks. Evidence: ARCHITECTURE.md §3.1; openspec/config.yaml conventions.
 - **REST API responses unwrapped from loop-task envelope.** The daemon returns `{ ok, data }` / `{ ok, error: { message } }`. The main process `handleApiRequest` unwraps this into `ApiResponse<T>` shape. Always unwrap at the main-process boundary, not in the renderer. Evidence: ARCHITECTURE.md §3.2; `src/main/index.ts` lines 189–200.
-- **Keep comment ratio under 10%.** Code must be self-explanatory through names, structure, and types. Comments are for WHY, not WHAT — only when the reason cannot be inferred from context. If more than 10% of lines in a file are comments, refactor for clarity instead of commenting. Delete stale, obvious, or code-restating comments.
+- **Keep comment ratio under 10%.** Code must be self-explanatory through names, structure, and types. Comments are for WHY, not WHAT, only when the reason cannot be inferred from context. If more than 10% of lines in a file are comments, refactor for clarity instead of commenting. Delete stale, obvious, or code-restating comments.
+- **Never use em-dashes (`—`).** Use commas, colons, or parentheses instead. This applies to all source files, comments, i18n strings, and documentation. The em-dash character (`U+2014`) is forbidden in this codebase.
 
 ## Testing
 
@@ -56,18 +57,18 @@ license: MIT
 
 - **Package manager: `pnpm` (never `npm` or `yarn`).** Node >= 20 required. Lockfile: `pnpm-lock.yaml`. Evidence: README.md; package.json; openspec/config.yaml.
 - **Build commands:**
-  - `pnpm dev` — Electron app with HMR (main + preload + renderer)
-  - `pnpm dev:web` — renderer-only in browser on port 5183 with mocked data (no Electron/daemon)
-  - `pnpm build` — `electron-vite build` → `out/main`, `out/preload`, `out/renderer`
-  - `pnpm start` — `electron-vite preview` (production build preview)
-  - `pnpm typecheck` — `tsc --noEmit` for both node + web project references
+  - `pnpm dev`, Electron app with HMR (main + preload + renderer)
+  - `pnpm dev:web`, renderer-only in browser on port 5183 with mocked data (no Electron/daemon)
+  - `pnpm build`, `electron-vite build` → `out/main`, `out/preload`, `out/renderer`
+  - `pnpm start`, `electron-vite preview` (production build preview)
+  - `pnpm typecheck`, `tsc --noEmit` for both node + web project references
 - **Build output goes to `out/`.** `out/` is gitignored. `package.json` `main` points to `./out/main/index.js`. Evidence: `.gitignore`; package.json.
 - **No CI/CD, no packaging config.** No electron-builder/forge, no Docker, no deployment pipeline. This is a locally-run desktop app. Evidence: ARCHITECTURE.md §8, §15.
 - **Two build targets share `src/renderer`:** the Electron renderer (`electron.vite.config.ts`) and a plain-browser preview (`vite.web.config.ts`, root: `src/renderer`). Evidence: ARCHITECTURE.md §1; `vite.web.config.ts`.
 
 ## Data & State
 
-- **No database — the app owns no durable domain data.** All authoritative data lives in the loop-task daemons. Local persistence is limited to config and window bounds. Evidence: ARCHITECTURE.md §5.
+- **No database, the app owns no durable domain data.** All authoritative data lives in the loop-task daemons. Local persistence is limited to config and window bounds. Evidence: ARCHITECTURE.md §5.
 - **Config persistence: `electron-store` in the main process.** Typed JSON in Electron's `userData` directory. Holds `environments`, `selectedEnvironmentId`, `sessionTokens`. Accessed by the renderer ONLY through typed IPC channels. Evidence: ARCHITECTURE.md §5; `src/main/config-store.ts`.
 - **No `localStorage` for config.** Instance/environment data is stored in the main process via `electron-store`, eliminating the renderer-side XSS surface. `localStorage` is used only as a fallback in mock mode (browser-only dev with no Electron). Evidence: ARCHITECTURE.md §9, §14.
 - **Session tokens encrypted at rest via `safeStorage`.** `config-store.ts` provides `encryptValue`/`decryptValue` wrappers using OS-native encryption (DPAPI on Windows, Keychain on macOS, libsecret on Linux). Session tokens are stored as `EncryptedSessionToken` with `encryptedAccessToken`. Evidence: `src/main/config-store.ts` lines 20–24, 370+.
@@ -91,7 +92,7 @@ license: MIT
 - **Lockfile: `pnpm-lock.yaml`.** Must be committed. Evidence: `.gitignore` does not exclude it.
 - **Node >= 20 required.** Evidence: README.md; ARCHITECTURE.md §7.
 - **Key dependencies (do not remove without team alignment):** Electron 37, electron-vite 4, React 19, electron-store 11, Vite 7, TypeScript 5.8, react-intl 10, vitest 4. Evidence: package.json.
-- **`allowBuilds` in `pnpm-workspace.yaml`:** `electron: false`, `esbuild: false` — these native build scripts are blocked. Do not change without understanding the implications. Evidence: `pnpm-workspace.yaml`.
+- **`allowBuilds` in `pnpm-workspace.yaml`:** `electron: false`, `esbuild: false`, these native build scripts are blocked. Do not change without understanding the implications. Evidence: `pnpm-workspace.yaml`.
 - **No lint/formatter config present.** No ESLint, Prettier, Biome, or similar. `pnpm typecheck` is the only code-quality gate. Evidence: no config files found; ARCHITECTURE.md §12.
 
 ## Git Workflow
@@ -108,25 +109,25 @@ license: MIT
 The following skills are installed in `.agents/skills/` and must be respected when working in their domain. When in doubt, load the relevant skill before implementing.
 
 ### Architecture & Structure
-- **`@feature-sliced-design`** — FSD layer rules for `src/renderer/src/`. Upper layers import from lower; `shared/` holds only cross-cutting primitives. Use this skill for any renderer structural decision.
-- **`@inversify-hooks`** — DI container wiring with `useInject` hook. Use for injecting services into React components and registering singletons/transients in the container.
+- **`@feature-sliced-design`**, FSD layer rules for `src/renderer/src/`. Upper layers import from lower; `shared/` holds only cross-cutting primitives. Use this skill for any renderer structural decision.
+- **`@inversify-hooks`**, DI container wiring with `useInject` hook. Use for injecting services into React components and registering singletons/transients in the container.
 
 ### React & Performance
-- **`@react-2026`** — React 19 patterns: Server Components, Actions, `use()`, `useOptimistic`, `useTransition`. Load before adding new React features.
-- **`@react-render-optimization`** — memoization, virtualization, avoiding re-renders. Load before touching hot-path components or adding lists. The renderer uses `@tanstack/react-virtual` for long lists.
-- **`@vercel-react-best-practices`** — data fetching, Suspense, concurrent patterns. Load for any data-loading or async UI work.
-- **`@hooks-pattern`** (PatternsDev) — custom hook composition. Prefer extracting stateful logic into hooks over putting it in components.
-- **`@provider-pattern`** (PatternsDev) — React context/provider patterns. Prefer this over prop drilling across more than 2 levels.
-- **`@compound-pattern`** (PatternsDev) — compound component API design for complex UI.
-- **`@virtual-lists`** (PatternsDev) — virtualizing large lists. Required when rendering >50 rows.
+- **`@react-2026`**, React 19 patterns: Server Components, Actions, `use()`, `useOptimistic`, `useTransition`. Load before adding new React features.
+- **`@react-render-optimization`**, memoization, virtualization, avoiding re-renders. Load before touching hot-path components or adding lists. The renderer uses `@tanstack/react-virtual` for long lists.
+- **`@vercel-react-best-practices`**, data fetching, Suspense, concurrent patterns. Load for any data-loading or async UI work.
+- **`@hooks-pattern`** (PatternsDev), custom hook composition. Prefer extracting stateful logic into hooks over putting it in components.
+- **`@provider-pattern`** (PatternsDev), React context/provider patterns. Prefer this over prop drilling across more than 2 levels.
+- **`@compound-pattern`** (PatternsDev), compound component API design for complex UI.
+- **`@virtual-lists`** (PatternsDev), virtualizing large lists. Required when rendering >50 rows.
 
 ### Build & Bundling
-- **`@vite`** — Vite 7 / electron-vite 4 configuration. Load for any build config change.
-- **`@vite-bundle-optimization`** (PatternsDev) — code splitting, tree shaking, dynamic imports. Load before changing import structure.
-- **`@js-performance-patterns`** (PatternsDev) — JS runtime performance. Load for hot-path or CPU-sensitive work.
+- **`@vite`**, Vite 7 / electron-vite 4 configuration. Load for any build config change.
+- **`@vite-bundle-optimization`** (PatternsDev), code splitting, tree shaking, dynamic imports. Load before changing import structure.
+- **`@js-performance-patterns`** (PatternsDev), JS runtime performance. Load for hot-path or CPU-sensitive work.
 
 ### Styling & Design
-- **`@accelint-design-foundation`** — CSS custom-property design tokens, spacing scale, variant system. Load for any styling work.
+- **`@accelint-design-foundation`**, CSS custom-property design tokens, spacing scale, variant system. Load for any styling work.
 
 ### DI wiring rule: `inversify-hooks` container must be configured in `app/` layer (FSD). Features inject via `useInject`; they do not construct services directly.
 

@@ -286,7 +286,7 @@ function loadBounds(): WindowBounds {
     const parsed = JSON.parse(raw) as WindowBounds;
     if (typeof parsed.width === "number" && typeof parsed.height === "number") return parsed;
   } catch {
-    // first launch or corrupt file — use defaults
+    // first launch or corrupt file, use defaults
   }
   return { width: 1440, height: 900 };
 }

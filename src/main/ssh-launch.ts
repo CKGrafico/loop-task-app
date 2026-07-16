@@ -63,7 +63,7 @@ if ss -tlnp 2>/dev/null | grep -q ":\${DAEMON_PORT} "; then
 fi
 
 # ── Mandatory: loop-task ──────────────────────────────────────────
-# Always installed — loop-task is mandatory (no __INSTALL__ flag needed).
+# Always installed, loop-task is mandatory (no __INSTALL__ flag needed).
 if [ -z "$DAEMON_SKIP" ]; then
   if ! command -v loop-task >/dev/null 2>&1; then
     echo "LOOP_TASK_INSTALLING"
@@ -289,7 +289,7 @@ export async function launchOnVm(
     opencodePort: null,
     errorDetail: null,
     logTail: null,
-    loopTaskStatus: "pending",    // mandatory — always runs
+    loopTaskStatus: "pending",    // mandatory, always runs
     openCodeStatus: "pending",
     ghStatus: "pending",
     azDoStatus: "pending",

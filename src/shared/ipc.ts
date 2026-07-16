@@ -1,6 +1,6 @@
 // Shared IPC contract between main, preload, and renderer.
 // All HTTP to loop-task environments runs in the MAIN process: the loop-task
-// daemon sends no CORS headers, so renderer fetch would be blocked — and
+// daemon sends no CORS headers, so renderer fetch would be blocked, and
 // main-process fetch also works unchanged for environments on remote VMs.
 
 export interface I18nMessage {

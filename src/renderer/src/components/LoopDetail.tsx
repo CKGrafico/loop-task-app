@@ -74,7 +74,7 @@ export function LoopDetail(props: {
             <div className="meta-item">
               <div className="label">{intl.formatMessage({ id: "loopDetail.lastExit" })}</div>
               <div className="value" style={failed ? { color: "var(--danger)" } : undefined}>
-                {loop.lastExitCode === null ? "—" : loop.lastExitCode}
+                {loop.lastExitCode === null ? "-" : loop.lastExitCode}
               </div>
             </div>
             <div className="meta-item">
@@ -86,7 +86,7 @@ export function LoopDetail(props: {
             </div>
             <div className="meta-item">
               <div className="label">{intl.formatMessage({ id: "loopDetail.pid" })}</div>
-              <div className="value">{loop.pid ?? "—"}</div>
+              <div className="value">{loop.pid ?? "-"}</div>
             </div>
             <div className="meta-item">
               <div className="label">{intl.formatMessage({ id: "loopDetail.workingDir" })}</div>
