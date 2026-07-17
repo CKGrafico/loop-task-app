@@ -1,10 +1,10 @@
-import { BrowserWindow } from "electron";
 import type { SshHost, VmWizardProgress, VmWizardResult, VmWizardPairResult, VmWizardProbeResult, VmWizardServiceSelection, I18nMessage } from "../shared/ipc.js";
 import { TOOL_DEFINITIONS } from "../shared/tool-definitions.js";
 import { listSshHosts, parseTarget } from "./ssh-config.js";
 import { probeVm, installNodeViaMise } from "./ssh-probe.js";
 import { launchOnVm, createPairingCodeOnRemote } from "./ssh-launch.js";
 import { getEnvironments, addEnvironment, exchangePairingCode, storeSessionToken, setOpenCodeEndpoint, autoPromoteFirstEnvIfNeeded } from "./config-store.js";
+import { getMainWindow } from "./main-window.js";
 import { msg } from "./i18n.js";
 
 let wizardCancelled = false;
@@ -42,8 +42,8 @@ export function respondServiceSelection(selection: VmWizardServiceSelection): vo
 export { listSshHosts };
 
 function emitProgress(progress: VmWizardProgress): void {
-  const win = BrowserWindow.getAllWindows()[0];
-  if (win && !win.isDestroyed()) {
+  const win = getMainWindow();
+  if (win) {
     win.webContents.send("vmWizard:progress", progress);
   }
 }
