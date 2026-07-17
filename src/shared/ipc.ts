@@ -97,9 +97,30 @@ export interface ConfigBridge {
   getMainVmId: () => Promise<string | null>;
 }
 
+// ── Platform detection ─────────────────────────────────────────────────
+
+export type PlatformType = "github" | "ado" | "unknown";
+
+export interface DetectPlatformParams {
+  environmentId: string;
+  projectId?: string;
+  /** Working directory of the project on the VM (where `git remote -v` runs). */
+  directory?: string;
+  /** Force re-detection even if a cached result exists. */
+  force?: boolean;
+}
+
+export interface PlatformDetectionResult {
+  platform: PlatformType;
+  /** The remote URLs that were classified (empty if detection failed). */
+  remotes: string[];
+  /** Whether the result came from cache. */
+  cached: boolean;
+}
+
 // ── Infra assistant ──────────────────────────────────────────────────
 
-export type InfraAction = "machine-status" | "clone-repo" | "create-issue";
+export type InfraAction = "machine-status" | "clone-repo" | "create-issue" | "detect-platform";
 
 export interface CreateIssueParams {
   title: string;
@@ -136,6 +157,7 @@ export interface InfraActionResult {
 export interface InfraBridge {
   executeAction: (args: InfraActionArgs) => Promise<InfraActionResult>;
   getStatus: () => Promise<{ mainVmId: string | null; connected: boolean }>;
+  getPlatform: (environmentId: string, projectId: string) => Promise<PlatformType>;
 }
 
 // ── Connection supervisor ─────────────────────────────────────────────

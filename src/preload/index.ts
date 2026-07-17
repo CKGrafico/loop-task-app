@@ -18,6 +18,7 @@ import type {
   SshHost,
   InfraActionArgs,
   InfraActionResult,
+  PlatformType,
 } from "../shared/ipc.js";
 
 const bridge: LoopTaskBridge = {
@@ -160,6 +161,8 @@ const bridge: LoopTaskBridge = {
       ipcRenderer.invoke("infra:executeAction", args) as Promise<InfraActionResult>,
     getStatus: () =>
       ipcRenderer.invoke("infra:getStatus") as Promise<{ mainVmId: string | null; connected: boolean }>,
+    getPlatform: (environmentId: string, projectId: string) =>
+      ipcRenderer.invoke("infra:getPlatform", environmentId, projectId) as Promise<PlatformType>,
   },
 };
 
