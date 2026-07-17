@@ -1,7 +1,8 @@
 {
   "id": "gh-125-fleet-health-sidebar-footer",
-  "status": "in-progress",
+  "status": "archived",
   "createdAt": "2026-07-17T19:00:00Z",
+  "archivedAt": "2026-07-17T20:00:00Z",
   "source": {
     "kind": "github-issue",
     "issueNumber": 125,
