@@ -3,6 +3,11 @@ import type { SshHost, VmWizardLaunchResult } from "../shared/ipc.js";
 import { sshExec } from "./ssh-probe.js";
 import { validateSshHost } from "./ssh-config.js";
 import { msg } from "./i18n.js";
+import {
+  VERIFIED_INSTALL_FN,
+  TAILSCALE_INSTALL,
+  pinnedNpmInstall,
+} from "./verified-install.js";
 
 const DEFAULT_DAEMON_PORT = 8845;
 const DEFAULT_OPENCODE_PORT = 13284;
@@ -38,6 +43,11 @@ function hashForHost(host: SshHost): string {
 
 const LAUNCH_SCRIPT_TEMPLATE = `
 set -e
+
+# ── Integrity-verified install function ──────────────────────────────
+# Replaces unsafe \`curl ... | sh\` with download-verify-then-execute.
+# See: https://github.com/orbion/orbion/issues/51
+__VERIFIED_INSTALL_FN__
 
 LAUNCH_DIR="$HOME/.orbion/ssh-launch/__HASH__"
 mkdir -p "$LAUNCH_DIR"
@@ -93,7 +103,7 @@ fi
 if [ -z "$DAEMON_SKIP" ]; then
   if ! command -v loop-task >/dev/null 2>&1; then
     echo "LOOP_TASK_INSTALLING"
-    "$NODE_BIN" -e "const { execSync } = require('child_process'); execSync('npm install -g loop-task', { stdio: 'inherit' });" 2>"$LAUNCH_DIR/install.log" || {
+    "$NODE_BIN" -e "const { execSync } = require('child_process'); execSync('__NPM_LOOP_TASK__', { stdio: 'inherit' });" 2>"$LAUNCH_DIR/install.log" || {
       echo "INSTALL_FAILED_LOOP_TASK"
       cat "$LAUNCH_DIR/install.log" 2>/dev/null
       exit 1
@@ -106,7 +116,7 @@ INSTALL_OPENCODE="__INSTALL_OPENCODE__"
 if [ -n "$INSTALL_OPENCODE" ]; then
   if ! command -v opencode >/dev/null 2>&1; then
     echo "OPENCODE_INSTALLING"
-    "$NODE_BIN" -e "const { execSync } = require('child_process'); execSync('npm install -g opencode', { stdio: 'inherit' });" 2>"$LAUNCH_DIR/install-oc.log" || {
+    "$NODE_BIN" -e "const { execSync } = require('child_process'); execSync('__NPM_OPENCODE__', { stdio: 'inherit' });" 2>"$LAUNCH_DIR/install-oc.log" || {
       echo "INSTALL_FAILED_OPENCODE"
       cat "$LAUNCH_DIR/install-oc.log" 2>/dev/null
       exit 1
@@ -157,7 +167,7 @@ INSTALL_JIRA="__INSTALL_JIRA__"
 if [ -n "$INSTALL_JIRA" ]; then
   if ! command -v acli >/dev/null 2>&1; then
     echo "JIRA_INSTALLING"
-    "$NODE_BIN" -e "const { execSync } = require('child_process'); execSync('npm install -g @atlassian/acli', { stdio: 'inherit' });" 2>"$LAUNCH_DIR/install-jira.log" || { echo "INSTALL_FAILED_JIRA"; exit 1; }
+    "$NODE_BIN" -e "const { execSync } = require('child_process'); execSync('__NPM_JIRA__', { stdio: 'inherit' });" 2>"$LAUNCH_DIR/install-jira.log" || { echo "INSTALL_FAILED_JIRA"; exit 1; }
     echo "JIRA_INSTALLED"
   fi
 fi
@@ -167,7 +177,7 @@ INSTALL_GITLAB="__INSTALL_GITLAB__"
 if [ -n "$INSTALL_GITLAB" ]; then
   if ! command -v glab >/dev/null 2>&1; then
     echo "GITLAB_INSTALLING"
-    "$NODE_BIN" -e "const { execSync } = require('child_process'); execSync('npm install -g @gitlab-org/cli', { stdio: 'inherit' });" 2>"$LAUNCH_DIR/install-glab.log" || { echo "INSTALL_FAILED_GITLAB"; exit 1; }
+    "$NODE_BIN" -e "const { execSync } = require('child_process'); execSync('__NPM_GITLAB__', { stdio: 'inherit' });" 2>"$LAUNCH_DIR/install-glab.log" || { echo "INSTALL_FAILED_GITLAB"; exit 1; }
     echo "GITLAB_INSTALLED"
   fi
 fi
@@ -211,7 +221,7 @@ INSTALL_TAILSCALE="__INSTALL_TAILSCALE__"
 if [ -n "$INSTALL_TAILSCALE" ]; then
   if ! command -v tailscale >/dev/null 2>&1; then
     echo "TAILSCALE_INSTALLING"
-    curl -fsSL https://tailscale.com/install.sh | sh 2>"$LAUNCH_DIR/install-tailscale.log" || { echo "INSTALL_FAILED_TAILSCALE"; exit 1; }
+    verified_install "__TAILSCALE_URL__" "__TAILSCALE_SHA__" "$LAUNCH_DIR/install-tailscale.log" || { echo "INSTALL_FAILED_TAILSCALE"; exit 1; }
     echo "TAILSCALE_INSTALLED"
   fi
 fi
@@ -221,7 +231,7 @@ INSTALL_CLAUDE="__INSTALL_CLAUDE__"
 if [ -n "$INSTALL_CLAUDE" ]; then
   if ! command -v claude >/dev/null 2>&1; then
     echo "CLAUDE_INSTALLING"
-    "$NODE_BIN" -e "const { execSync } = require('child_process'); execSync('npm install -g @anthropic-ai/claude-code', { stdio: 'inherit' });" 2>"$LAUNCH_DIR/install-claude.log" || { echo "INSTALL_FAILED_CLAUDE"; exit 1; }
+    "$NODE_BIN" -e "const { execSync } = require('child_process'); execSync('__NPM_CLAUDE__', { stdio: 'inherit' });" 2>"$LAUNCH_DIR/install-claude.log" || { echo "INSTALL_FAILED_CLAUDE"; exit 1; }
     echo "CLAUDE_INSTALLED"
   fi
 fi
@@ -369,6 +379,14 @@ export async function launchOnVm(
 
   const script = LAUNCH_SCRIPT_TEMPLATE
     .replace(/__HASH__/g, hash)
+    .replace(/__VERIFIED_INSTALL_FN__/g, VERIFIED_INSTALL_FN)
+    .replace(/__TAILSCALE_URL__/g, TAILSCALE_INSTALL.url)
+    .replace(/__TAILSCALE_SHA__/g, TAILSCALE_INSTALL.sha256)
+    .replace(/__NPM_LOOP_TASK__/g, pinnedNpmInstall("loopTask"))
+    .replace(/__NPM_OPENCODE__/g, pinnedNpmInstall("openCode"))
+    .replace(/__NPM_JIRA__/g, pinnedNpmInstall("jira"))
+    .replace(/__NPM_GITLAB__/g, pinnedNpmInstall("gitlab"))
+    .replace(/__NPM_CLAUDE__/g, pinnedNpmInstall("claude"))
     .replace(/__DAEMON_PORT__/g, String(daemonPort))
     .replace(/__OPENCODE_PORT__/g, String(opencodePort))
     .replace(/__INSTALL_OPENCODE__/g, probeResult.installOpenCode ? "1" : "")
