@@ -3,6 +3,10 @@ import type { SshHost, VmWizardProbeResult, I18nMessage } from "../shared/ipc.js
 import { compareSemver } from "../shared/utils.js";
 import { buildSshArgs } from "./ssh-config.js";
 import { msg } from "./i18n.js";
+import {
+  VERIFIED_INSTALL_FN,
+  MISE_INSTALL,
+} from "./verified-install.js";
 
 const NODE_VERSION_FLOOR = "18.0.0";
 
@@ -233,7 +237,10 @@ if [ ! -x "\${MISE_BIN}" ]; then
     echo "MISE_INSTALL_FAILED|curl is required to install mise"
     exit 0
   fi
-  curl -fsSL https://mise.run | sh || {
+  # ── Integrity-verified install (replaces curl-pipe-sh) ───────
+  # See: https://github.com/orbion/orbion/issues/51
+  __VERIFIED_INSTALL_FN__
+  verified_install "__MISE_URL__" "__MISE_SHA__" "/tmp/orbion-mise-install.log" || {
     echo "MISE_INSTALL_FAILED|mise install script failed"
     exit 0
   }
@@ -276,7 +283,11 @@ export async function installNodeViaMise(host: SshHost): Promise<MiseInstallResu
     errorDetail: null,
   };
 
-  const installResult = await sshExec(host, MISE_INSTALL_SCRIPT, 120_000);
+  const script = MISE_INSTALL_SCRIPT
+    .replace(/__VERIFIED_INSTALL_FN__/g, VERIFIED_INSTALL_FN)
+    .replace(/__MISE_URL__/g, MISE_INSTALL.url)
+    .replace(/__MISE_SHA__/g, MISE_INSTALL.sha256);
+  const installResult = await sshExec(host, script, 120_000);
 
   for (const line of installResult.stdout.split("\n")) {
     const trimmed = line.trim();
