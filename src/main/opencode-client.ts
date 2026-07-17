@@ -5,7 +5,7 @@ import type {
 } from "../shared/ipc.js";
 import type { InternalOpenCodeEndpoint } from "./config-store.js";
 import { compareSemver, trimTrailingSlash } from "../shared/utils.js";
-import { BrowserWindow } from "electron";
+import { getMainWindow } from "./main-window.js";
 import { msg } from "./i18n.js";
 import { decryptValue } from "./config-store.js";
 
@@ -184,8 +184,8 @@ export async function refreshOpenCodeStatus(
   const status = await probeWithClient(client);
   statusCache.set(environmentId, { status, at: Date.now() });
 
-  const win = BrowserWindow.getAllWindows()[0];
-  if (win && !win.isDestroyed()) {
+  const win = getMainWindow();
+  if (win) {
     win.webContents.send("opencode:status", { environmentId, status });
   }
 

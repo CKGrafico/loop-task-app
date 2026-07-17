@@ -52,6 +52,7 @@ import { getOpenCodeStatus, refreshOpenCodeStatus, clearOpenCodeStatus } from ".
 import { listSshHosts as vmListSshHosts, runWizard, cancelWizard, respondConsent, respondServiceSelection } from "./vm-wizard.js";
 import { msg } from "./i18n.js";
 import { validateIpc, safeHandle, IpcValidationError } from "./ipc-validation.js";
+import { setMainWindow, getMainWindow } from "./main-window.js";
 
 const streams = new Map<string, AbortController>();
 
@@ -65,8 +66,8 @@ function getOrCreateSupervisor(environmentId: string, baseUrl: string): Connecti
     const supervisor = new ConnectionSupervisor(
     makeProbe(baseUrl, environmentId),
     (status: ConnectionStatus) => {
-      const win = BrowserWindow.getAllWindows()[0];
-      if (win && !win.isDestroyed()) {
+      const win = getMainWindow();
+      if (win) {
         win.webContents.send("connection:status", environmentId, status);
       }
     },
@@ -84,8 +85,8 @@ function syncEndpointTracker(environmentId: string): void {
   let tracker = endpointTrackers.get(environmentId);
   if (!tracker) {
     tracker = new EndpointHealthTracker(environmentId, (health) => {
-      const win = BrowserWindow.getAllWindows()[0];
-      if (win && !win.isDestroyed()) {
+      const win = getMainWindow();
+      if (win) {
         win.webContents.send("connection:endpointHealth", environmentId, health);
       }
     });
@@ -349,6 +350,8 @@ function createWindow(): void {
   win.on("focus", () => {
     wakeupAll();
   });
+
+  setMainWindow(win);
 }
 
 const gotLock = app.requestSingleInstanceLock();
@@ -357,7 +360,7 @@ if (!gotLock) {
 }
 
 app.on("second-instance", () => {
-  const win = BrowserWindow.getAllWindows()[0];
+  const win = getMainWindow();
   if (win) {
     if (win.isMinimized()) win.restore();
     win.focus();
