@@ -14,10 +14,13 @@ import type {
   InfraActionResult,
   CreateIssueParams,
   CreateIssueResult,
+  PlatformType,
+  PlatformDetectionResult,
 } from "../shared/ipc.js";
 import type { Environment, SessionScope } from "../shared/ipc.js";
 import { trimTrailingSlash } from "../shared/utils.js";
 import { fetchAndUnwrap } from "./http-utils.js";
+import { classifyPlatform, parseGitRemoteOutput } from "./platform-classifier.js";
 import {
   getEnvironments,
   addEnvironment,
@@ -58,6 +61,9 @@ import { validateIpc, safeHandle, IpcValidationError } from "./ipc-validation.js
 import { setMainWindow, getMainWindow } from "./main-window.js";
 
 const streams = new Map<string, AbortController>();
+
+/** Cache: `${environmentId}:${projectId}` → detected platform. In-memory, session-scoped. */
+const platformCache = new Map<string, PlatformType>();
 
 const supervisors = new Map<string, ConnectionSupervisor>();
 const endpointTrackers = new Map<string, EndpointHealthTracker>();
@@ -184,6 +190,23 @@ function checkPlatformCli(): Promise<CliCheckResult | null> {
       }
       // gh found but not authenticated
       resolve({ cli: "gh", authenticated: false, error: stderr || err.message });
+    });
+  });
+}
+
+function platformCacheKey(environmentId: string, projectId: string): string {
+  return `${environmentId}:${projectId}`;
+}
+
+function detectPlatform(directory: string): Promise<PlatformType> {
+  return new Promise((resolve) => {
+    execFile("git", ["remote", "-v"], { cwd: directory, timeout: 10_000 }, (err, stdout) => {
+      if (err) {
+        resolve("unknown");
+        return;
+      }
+      const urls = parseGitRemoteOutput(stdout);
+      resolve(classifyPlatform(urls));
     });
   });
 }
@@ -704,21 +727,117 @@ app.whenReady().then(() => {
         }
         return { ok: true, data: { vm: targetEnv.name, repoUrl, result: cloneResult.data } };
       }
+      case "detect-platform": {
+        const envId = args.params?.environmentId as string | undefined;
+        const projectId = (args.params?.projectId as string | undefined) ?? "";
+        const directory = args.params?.directory as string | undefined;
+        const force = (args.params?.force as boolean | undefined) ?? false;
+
+        if (!envId) {
+          return { ok: false, error: msg("platformDetect.envIdRequired") };
+        }
+
+        const key = platformCacheKey(envId, projectId);
+        if (!force && platformCache.has(key)) {
+          const cached: PlatformDetectionResult = {
+            platform: platformCache.get(key)!,
+            remotes: [],
+            cached: true,
+          };
+          return { ok: true, data: cached };
+        }
+
+        if (!directory) {
+          // No directory provided — cannot run git, report unknown
+          platformCache.set(key, "unknown");
+          const result: PlatformDetectionResult = {
+            platform: "unknown",
+            remotes: [],
+            cached: false,
+          };
+          return { ok: true, data: result };
+        }
+
+        const platform = await detectPlatform(directory);
+        platformCache.set(key, platform);
+
+        // Re-run git to capture the URLs for reporting
+        let remotes: string[] = [];
+        try {
+          remotes = await new Promise<string[]>((resolve) => {
+            execFile("git", ["remote", "-v"], { cwd: directory, timeout: 10_000 }, (err, stdout) => {
+              if (err) { resolve([]); return; }
+              resolve(parseGitRemoteOutput(stdout));
+            });
+          });
+        } catch {
+          // best effort
+        }
+
+        const result: PlatformDetectionResult = {
+          platform,
+          remotes,
+          cached: false,
+        };
+        return { ok: true, data: result };
+      }
       case "create-issue": {
         const params = args.params as CreateIssueParams | undefined;
         if (!params?.title) {
           return { ok: false, error: msg("issues.titleRequired") };
         }
 
+        // Prefer cached platform when available
+        const cachedPlatform = args.params?.projectId
+          ? platformCache.get(platformCacheKey(mainVmEnv.id, args.params.projectId as string))
+          : undefined;
+
+        let preferredCli: "gh" | "az" | null = null;
+        if (cachedPlatform === "github") {
+          preferredCli = "gh";
+        } else if (cachedPlatform === "ado") {
+          preferredCli = "az";
+        }
+
         const cliCheck = await checkPlatformCli();
-        if (!cliCheck) {
+        if (!cliCheck && !preferredCli) {
           return { ok: false, error: msg("issues.noPlatformCli") };
         }
-        if (!cliCheck.authenticated) {
-          if (cliCheck.cli === "gh") {
-            return { ok: false, error: msg("issues.ghNotAuth") };
+
+        // Determine which CLI to use: prefer cached platform, fall back to heuristic
+        let useCli: "gh" | "az";
+
+        if (preferredCli) {
+          // Use the preferred CLI if it's available and authenticated
+          if (preferredCli === "gh" && cliCheck?.cli === "gh" && cliCheck.authenticated) {
+            useCli = "gh";
+          } else if (preferredCli === "az" && cliCheck?.cli === "az" && cliCheck.authenticated) {
+            useCli = "az";
+          } else if (cliCheck && cliCheck.authenticated) {
+            // Preferred CLI not available/authenticated, fall back to whatever works
+            useCli = cliCheck.cli;
+          } else {
+            // No authenticated CLI at all
+            if (!cliCheck) {
+              return { ok: false, error: msg("issues.noPlatformCli") };
+            }
+            if (cliCheck.cli === "gh") {
+              return { ok: false, error: msg("issues.ghNotAuth") };
+            }
+            return { ok: false, error: msg("issues.azNotAuth") };
           }
-          return { ok: false, error: msg("issues.azNotAuth") };
+        } else {
+          // No cached platform — use existing heuristic
+          if (!cliCheck) {
+            return { ok: false, error: msg("issues.noPlatformCli") };
+          }
+          if (!cliCheck.authenticated) {
+            if (cliCheck.cli === "gh") {
+              return { ok: false, error: msg("issues.ghNotAuth") };
+            }
+            return { ok: false, error: msg("issues.azNotAuth") };
+          }
+          useCli = cliCheck.cli;
         }
 
         const title = params.title;
@@ -726,7 +845,7 @@ app.whenReady().then(() => {
         const labels = params.labels ?? [];
         const repo = params.repo;
 
-        if (cliCheck.cli === "gh") {
+        if (useCli === "gh") {
           const ghArgs: string[] = ["issue", "create", "--title", title, "--body", body];
           for (const label of labels) {
             ghArgs.push("--label", label);
@@ -790,6 +909,12 @@ app.whenReady().then(() => {
     const connected = mainVmId !== null && supervisors.has(mainVmId)
       && supervisors.get(mainVmId)!.getStatus().phase === "connected";
     return { mainVmId, connected };
+  });
+
+  safeHandle("infra:getPlatform", (_event, ...rawArgs): PlatformType => {
+    const [environmentId, projectId] = validateIpc<[string, string]>("infra:getPlatform", rawArgs);
+    const key = platformCacheKey(environmentId, projectId);
+    return platformCache.get(key) ?? "unknown";
   });
 
   void autoPromoteFirstEnvIfNeeded();

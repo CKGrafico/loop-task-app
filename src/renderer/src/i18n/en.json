@@ -314,11 +314,18 @@
     "botInitials": "INF",
     "noData": "No machine data available.",
     "unreachable": "Unable to reach the infrastructure runtime. Check that the main VM is connected.",
-    "helpText": "I can help you with fleet operations. Try:\n- machine-status: get the health of all VMs\n- clone repo: clone a git repository on a VM\n- create issue: file a new GitHub issue or ADO work item",
+    "helpText": "I can help you with fleet operations. Try:\n- machine-status: get the health of all VMs\n- clone repo: clone a git repository on a VM\n- create issue: file a new GitHub issue or ADO work item\n- detect-platform: identify a project's hosting platform from git remotes",
     "fleetStatusHeader": "Fleet Status",
     "cloneInitiated": "## Clone initiated\n\n{data}",
     "errorMessage": "**Error:** {detail}",
     "unknownError": "Unknown error"
+  },
+  "platformDetect": {
+    "envIdRequired": "environmentId is required for platform detection",
+    "noDirectory": "No project directory provided — cannot detect platform. Specify a working directory.",
+    "platformDetected": "Detected platform: **{platform}** (from {count} remote{count, plural, one {} other {s}})",
+    "platformUnknown": "Could not determine the platform from git remotes. The repository may use an unsupported host.",
+    "platformCached": "Platform (cached): **{platform}**"
   },
   "issues": {
     "draftTitle": "Draft issue",

@@ -20,6 +20,7 @@ import type {
   ApiResponse,
   StreamSubscribeArgs,
   StreamEventPayload,
+  PlatformType,
 } from "../../../shared/ipc";
 
 export interface IConfigService {
@@ -66,6 +67,7 @@ export interface IVmWizardService {
 export interface IInfraService {
   executeAction(args: InfraActionArgs): Promise<InfraActionResult>;
   getStatus(): Promise<{ mainVmId: string | null; connected: boolean }>;
+  getPlatform(environmentId: string, projectId: string): Promise<PlatformType>;
 }
 
 export interface IApiService {

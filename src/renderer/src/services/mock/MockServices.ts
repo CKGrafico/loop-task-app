@@ -17,6 +17,7 @@ import type {
   OpenCodeEndpoint,
   SessionScope,
   SetOpenCodeEndpointResult,
+  PlatformType,
 } from "../../../../shared/ipc";
 import type { LoopMeta, Project, TaskDefinition } from "../../types";
 import type {
@@ -222,9 +223,18 @@ export class MockInfraService implements IInfraService {
         },
       };
     }
+    if (args.action === "detect-platform") {
+      const result: import("../../../../shared/ipc").PlatformDetectionResult = {
+        platform: "github",
+        remotes: ["https://github.com/mock-org/mock-repo.git"],
+        cached: false,
+      };
+      return { ok: true, data: result };
+    }
     return { ok: false, error: "mock" };
   }
   async getStatus(): Promise<{ mainVmId: string | null; connected: boolean }> { return { mainVmId: null, connected: false }; }
+  async getPlatform(): Promise<PlatformType> { return "github"; }
 }
 
 @injectable()
