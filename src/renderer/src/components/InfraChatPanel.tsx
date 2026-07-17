@@ -20,14 +20,24 @@ interface InfraChatPanelProps {
   mainVmName: string;
 }
 
+/** Escape markdown special characters and strip HTML-like tags from untrusted strings
+ *  before interpolation into markdown content, preventing XSS via daemon-controlled data. */
+function escapeMd(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/[*_~`#[\]|\\]/g, (ch) => `\\${ch}`);
+}
+
 function formatMachineStatusReport(intl: IntlShape, data: unknown): string {
   if (!Array.isArray(data)) return intl.formatMessage({ id: "infra.noData" });
   const lines: string[] = [`## ${intl.formatMessage({ id: "infra.fleetStatusHeader" })}\n`];
   for (const machine of data as MachineStatusEntry[]) {
     const icon = machine.health === "connected" ? "🟢" : machine.health === "offline" ? "🔴" : "🟡";
-    lines.push(`**${machine.name}** ${icon} \`${machine.health}\``);
+    lines.push(`**${escapeMd(machine.name)}** ${icon} \`${escapeMd(machine.health)}\``);
     for (const ep of machine.endpoints) {
-      lines.push(`  - ${ep.kind}: \`${ep.url}\``);
+      lines.push(`  - ${escapeMd(ep.kind)}: \`${escapeMd(ep.url)}\``);
     }
     lines.push("");
   }
