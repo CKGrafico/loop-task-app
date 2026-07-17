@@ -38,6 +38,7 @@ orbion/
 │   │   ├── config-store.ts     # electron-store config + safeStorage wrapper
 │   │   ├── connection-supervisor.ts  # Periodic health probes + SSE reconnect
 │   │   ├── opencode-client.ts  # OpenCode server status + version checks
+│   │   ├── platform-classifier.ts  # Git remote URL → platform classification
 │   │   └── ssh-probe.ts        # SSH-based VM probing + Node/mise installation
 │   ├── preload/
 │   │   └── index.ts            # contextBridge → window.api (typed IPC surface)
@@ -150,20 +151,26 @@ There is no separate server; the **Electron main process is the backend**
 IPC handlers registered on `app.whenReady`: `api:request`, `stream:subscribe`,
 `stream:unsubscribe`, `config:getInstances`, `config:addInstance`,
 `config:removeInstance`, `config:getSelectedInstanceId`,
-`config:setSelectedInstanceId`, `config:migrateFromLocalStorage`.
+`config:setSelectedInstanceId`, `config:migrateFromLocalStorage`,
+`infra:executeAction`, `infra:getStatus`, `infra:getPlatform`.
 
 ### 3.3 Shared Libraries / Common Code
 
 - **`src/shared/ipc.ts`** — the single source of truth for the IPC contract:
   `ApiRequestArgs`, `ApiResponse<T>`, `StreamSubscribeArgs`,
-  `StreamEventPayload`, `Instance`, `ConfigBridge`, and `LoopTaskBridge`
-  (the shape of `window.api`, including the `config` sub-bridge).
+  `StreamEventPayload`, `Instance`, `ConfigBridge`, `LoopTaskBridge`
+  (the shape of `window.api`, including the `config` sub-bridge),
+  `PlatformType`, `PlatformDetectionResult`, `DetectPlatformParams`,
+  and the `InfraBridge` (including `getPlatform`).
   Imported by all three layers so the boundary stays type-safe.
 - **`src/renderer/src/types.ts`** — domain types (`LoopMeta`, `RunRecord`,
   `Project`, `TaskDefinition`, `Instance`, `LoopStatus`, `InstanceHealth`)
   mirrored from the loop-task daemon.
 - **`src/renderer/src/format.ts`** — pure helpers: `timeAgo`, `timeUntil`,
   `commandLine`, `hostLabel`, and the `STATUS_COLORS` palette.
+- **`src/main/platform-classifier.ts`** — pure classifiers: `classifyPlatform`
+  and `parseGitRemoteOutput`. Matches git remote URLs against GitHub and
+  Azure DevOps patterns, returning `PlatformType`. No Electron dependencies.
 
 ### 3.4 Preload
 
