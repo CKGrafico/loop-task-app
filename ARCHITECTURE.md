@@ -23,8 +23,9 @@ The renderer is deliberately isolated (`contextIsolation: true`,
 the loop-task daemon returns no CORS headers (renderer `fetch` would be blocked)
 and because main-process fetch works identically for daemons on remote hosts.
 
-The app is **read-only in v1**: it observes loop-task state but does not mutate
-it (no pause/resume/trigger/edit/delete).
+The app is **read-only in v1** for direct loop editing: it observes loop-task state
+and performs triage actions via the inbox (pause, resume, trigger, dismiss). Loop
+creation, editing, and deletion are not yet implemented.
 
 ## 1. Project Structure
 
@@ -59,7 +60,7 @@ orbion/
 │           ├── bridge.d.ts      # Ambient window.api typing for the renderer
 │           ├── features/
 │           │   └── inbox/
-│           │       └── InboxPanel.tsx  # Conversational inbox with fleet-scoped queries
+│           │       └── InboxPanel.tsx  # Conversational inbox with fleet-scoped queries + inline actions
 │           └── components/
 │               ├── Sidebar.tsx           # Instance list + health dots
 │               ├── SegmentedTabs.tsx     # Loops/Tasks/Projects pill switcher
@@ -159,7 +160,12 @@ IPC handlers registered on `app.whenReady`: `api:request`, `stream:subscribe`,
 `budget:getWatches`, `budget:addWatch`, `budget:removeWatch`,
 `budget:updateWatch`, `budget:getBreaches`, `budget:addBreach`,
 `budget:dismissBreach`, `inbox:getItems`, `inbox:dismissItem`,
-`inbox:queryFleet`. The `infra:executeAction` handler supports
+`inbox:queryFleet`, `inbox:resolveItem`, `inbox:getResolvedItems`,
+`inbox:pruneResolvedItems`. The inbox service also performs inline
+actions (`run-now`, `pause`, `resume`, `restart`, `dismiss`, `open-in-chat`)
+via its `executeInboxAction` method, which calls the same loop-task API
+endpoints as the loop card (`POST /api/loops/:id/trigger`,
+`POST /api/loops/:id/pause`, `POST /api/loops/:id/resume`). The `infra:executeAction` handler supports
 actions: `machine-status`, `clone-repo`, `create-issue`,
 `detect-platform`, `list-issues`, `add-label`, `edit-issue`.
 
@@ -170,9 +176,16 @@ actions: `machine-status`, `clone-repo`, `create-issue`,
   `StreamEventPayload`, `Instance`, `ConfigBridge`, `LoopTaskBridge`
   (the shape of `window.api`, including the `config` sub-bridge),
   `PlatformType`, `PlatformDetectionResult`, `DetectPlatformParams`,
-  and the `InfraBridge` (including `getPlatform`), `ListIssuesParams`,
+  the `InfraBridge` (including `getPlatform`), `ListIssuesParams`,
   `IssueCard`, `ListIssuesResult`, `CreateIssueParams`, `CreateIssueResult`,
-  `AddLabelParams`, `AddLabelResult`, `EditIssueParams`, `EditIssueResult`.
+  `AddLabelParams`, `AddLabelResult`, `EditIssueParams`, `EditIssueResult`,
+  `InboxItemKind` (including `failed-loop`, `finished-loop`, `breach`,
+  `instance-offline`, `prolonged-offline`), `InboxAction` (inline triage
+  verbs: `run-now`, `pause`, `resume`, `restart`, `dismiss`, `open-in-chat`),
+  `InboxItem` (with `availableActions` and `projectId` fields),
+  `ResolvedInboxItem`, `InboxItemResolutionReason`, `InboxQueryResult`,
+  `BudgetWatch`, `BudgetBreach`, `ConditionWatch`, `WatchCondition`,
+  `WatchTarget`, `WatchConditionKind`, `OutageEscalation`.
   Imported by all three layers so the boundary stays type-safe.
 - **`src/renderer/src/types.ts`** — domain types (`LoopMeta`, `RunRecord`,
   `Project`, `TaskDefinition`, `Instance`, `LoopStatus`, `InstanceHealth`)
@@ -466,4 +479,4 @@ and screenshots without a daemon. This is a notable gap (see §15).
 - **Mock mode** — renderer running without `window.api` (plain browser), backed
   by `mock.ts`.
 
-<!-- Last updated: 2026-07-17T12:00:00Z -->
+<!-- Last updated: 2026-07-17T18:00:00Z -->
