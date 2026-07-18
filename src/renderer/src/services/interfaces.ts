@@ -12,8 +12,8 @@ import type {
   SshHost,
   VmWizardProgress,
   VmWizardResult,
+  VmWizardStartOptions,
   VmWizardServiceSelection,
-  ReachMethod,
   TailscalePeersResponse,
   InfraActionArgs,
   InfraActionResult,
@@ -72,7 +72,7 @@ export interface IOpenCodeService {
 
 export interface IVmWizardService {
   listSshHosts(): Promise<SshHost[]>;
-  startWizard(target: string, name?: string, reachMethod?: ReachMethod, directUrl?: string): Promise<VmWizardResult>;
+  startWizard(options: VmWizardStartOptions): Promise<VmWizardResult>;
   onProgress(cb: (progress: VmWizardProgress) => void): () => void;
   cancelWizard(): void;
   respondConsent(decision: "install" | "skip"): void;
