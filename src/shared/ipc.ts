@@ -68,10 +68,19 @@ export type EnvironmentAuthState = "unauthenticated" | "paired" | "blocked" | "u
 
 export type EnvironmentRole = "coding" | "main-vm";
 
+export type AgentRuntime = "opencode" | "claude";
+
+export interface EnvironmentCredentialRefs {
+  sessionToken?: string;
+  sshKeyPassphrase?: string;
+}
+
 export interface Environment {
   id: string;
   name: string;
   role?: EnvironmentRole;
+  agentRuntime: AgentRuntime;
+  credentialRefs?: EnvironmentCredentialRefs;
   endpoints: AccessEndpoint[];
   activeEndpointId: string | null;
   authState?: EnvironmentAuthState;
@@ -300,6 +309,15 @@ export type SetOpenCodeEndpointResult =
 
 export type ReachMethod = "local" | "ssh";
 
+export interface VmWizardStartOptions {
+  target: string;
+  name?: string;
+  reachMethod?: ReachMethod;
+  directUrl?: string;
+  agentRuntime: AgentRuntime;
+  sshKeyPassphrase?: string;
+}
+
 export type VmWizardStep =
   | "idle"
   | "pick-reach-method"
@@ -390,7 +408,7 @@ export interface VmWizardResult {
 
 export interface VmWizardBridge {
   listSshHosts: () => Promise<SshHost[]>;
-  startWizard: (target: string, name?: string, reachMethod?: ReachMethod, directUrl?: string) => Promise<VmWizardResult>;
+  startWizard: (options: VmWizardStartOptions) => Promise<VmWizardResult>;
   onProgress: (cb: (progress: VmWizardProgress) => void) => () => void;
   cancelWizard: () => void;
   respondConsent: (decision: "install" | "skip") => void;

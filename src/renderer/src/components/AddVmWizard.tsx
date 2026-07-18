@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useIntl, type IntlShape } from "react-intl";
 import { cid, useInject } from "inversify-hooks";
-import type { ReachMethod, SshHost, VmWizardProgress, VmWizardServiceSelection, VmWizardServiceStatus, VmWizardStep } from "../../shared/ipc";
-import { TOOL_DEFINITIONS, type ToolDefinition } from "../../shared/tool-definitions";
+import type { AgentRuntime, ReachMethod, SshHost, VmWizardProgress, VmWizardServiceSelection, VmWizardServiceStatus, VmWizardStep } from "../../../shared/ipc";
+import { TOOL_DEFINITIONS, type ToolDefinition } from "../../../shared/tool-definitions";
 import { ShieldCheck, X, Check, Loader, SkipForward, Lock, Globe, Terminal } from "lucide-react";
 import { translateMessage } from "../i18n";
 import type { IVmWizardService, IConfigService } from "../services/interfaces";
@@ -54,6 +54,8 @@ export function AddVmWizard(props: {
   const [target, setTarget] = useState("");
   const [envName, setEnvName] = useState("");
   const [reachMethod, setReachMethod] = useState<ReachMethod>("ssh");
+  const [agentRuntime, setAgentRuntime] = useState<AgentRuntime>("opencode");
+  const [sshKeyPassphrase, setSshKeyPassphrase] = useState("");
   const [localUrl, setLocalUrl] = useState("");
   const [hosts, setHosts] = useState<SshHost[]>([]);
   const [hostsLoaded, setHostsLoaded] = useState(false);
@@ -99,7 +101,13 @@ export function AddVmWizard(props: {
       setRunning(true);
       setProgress(null);
       try {
-        const result = await vmWizardService.startWizard("", envName.trim() || undefined, "local", url);
+        const result = await vmWizardService.startWizard({
+          target: "",
+          name: envName.trim() || undefined,
+          reachMethod: "local",
+          directUrl: url,
+          agentRuntime,
+        });
         setDoneResult(result);
       } catch {
         // progress already set via onProgress
@@ -110,7 +118,13 @@ export function AddVmWizard(props: {
       setRunning(true);
       setProgress(null);
       try {
-        const result = await vmWizardService.startWizard(trimmed, envName.trim() || undefined, "ssh");
+        const result = await vmWizardService.startWizard({
+          target: trimmed,
+          name: envName.trim() || undefined,
+          reachMethod: "ssh",
+          agentRuntime,
+          ...(sshKeyPassphrase ? { sshKeyPassphrase } : {}),
+        });
         setDoneResult(result);
       } catch {
         // progress already set via onProgress
@@ -268,6 +282,60 @@ export function AddVmWizard(props: {
           </div>
         </div>
 
+        <div className="field">
+          <label id="vm-wizard-runtime-label">{intl.formatMessage({ id: "vmWizard.runtimeLabel" })}</label>
+          <div
+            role="radiogroup"
+            aria-labelledby="vm-wizard-runtime-label"
+            aria-describedby="vm-wizard-runtime-description"
+            style={{
+              display: "flex",
+              padding: 3,
+              background: "var(--bg-input)",
+              border: "1px solid var(--border-subtle)",
+              borderRadius: 999,
+              opacity: running ? 0.65 : 1,
+            }}
+          >
+            {(["opencode", "claude"] as const).map((runtime) => {
+              const isSelected = agentRuntime === runtime;
+              return (
+                <button
+                  key={runtime}
+                  type="button"
+                  role="radio"
+                  aria-checked={isSelected}
+                  tabIndex={isSelected ? 0 : -1}
+                  disabled={running}
+                  onClick={() => setAgentRuntime(runtime)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+                    event.preventDefault();
+                    setAgentRuntime(runtime === "opencode" ? "claude" : "opencode");
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: "7px 12px",
+                    border: 0,
+                    borderRadius: 999,
+                    background: isSelected ? "var(--bg-active)" : "transparent",
+                    color: isSelected ? "var(--text-primary)" : "var(--text-secondary)",
+                    fontSize: 12.5,
+                    fontWeight: isSelected ? 600 : 400,
+                    cursor: running ? "default" : "pointer",
+                    boxShadow: isSelected ? "inset 0 0 0 1px var(--border)" : "none",
+                  }}
+                >
+                  {intl.formatMessage({ id: runtime === "opencode" ? "vmWizard.runtimeOpenCode" : "vmWizard.runtimeClaudeCode" })}
+                </button>
+              );
+            })}
+          </div>
+          <div id="vm-wizard-runtime-description" style={{ marginTop: 6, fontSize: 11.5, color: "var(--text-muted)", lineHeight: 1.4 }}>
+            {intl.formatMessage({ id: "vmWizard.runtimeDescription" })}
+          </div>
+        </div>
+
         {/* ── Conditional fields based on reach method ─────── */}
         {reachMethod === "local" ? (
           <div className="field">
@@ -303,6 +371,26 @@ export function AddVmWizard(props: {
                 <span>
                   {intl.formatMessage({ id: "vmWizard.securityNote" })}
                 </span>
+              </div>
+            </div>
+
+            <div className="field">
+              <label htmlFor="vm-wizard-ssh-key-passphrase">
+                {intl.formatMessage({ id: "vmWizard.sshKeyPassphraseLabel" })}
+              </label>
+              <input
+                id="vm-wizard-ssh-key-passphrase"
+                type="password"
+                autoComplete="current-password"
+                spellCheck={false}
+                placeholder={intl.formatMessage({ id: "vmWizard.sshKeyPassphrasePlaceholder" })}
+                value={sshKeyPassphrase}
+                onChange={(event) => setSshKeyPassphrase(event.target.value)}
+                disabled={running}
+                aria-describedby="vm-wizard-ssh-key-passphrase-description"
+              />
+              <div id="vm-wizard-ssh-key-passphrase-description" style={{ marginTop: 6, fontSize: 11.5, color: "var(--text-muted)", lineHeight: 1.4 }}>
+                {intl.formatMessage({ id: "vmWizard.sshKeyPassphraseDescription" })}
               </div>
             </div>
 

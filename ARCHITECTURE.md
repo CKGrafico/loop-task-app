@@ -37,6 +37,7 @@ orbion/
 │   │   │                       #   HTTP proxy, SSE client, bounds persistence
 │   │   ├── http-utils.ts       # Shared fetch + envelope unwrapping (fetchAndUnwrap)
 │   │   ├── config-store.ts     # electron-store config + safeStorage wrapper
+│   │   ├── credential-vault.ts # Dedicated safeStorage-encrypted credential records
 │   │   ├── connection-supervisor.ts  # Periodic health probes + SSE reconnect
 │   │   ├── opencode-client.ts  # OpenCode server status + version checks
 │   │   ├── platform-classifier.ts  # Git remote URL → platform classification
@@ -154,8 +155,10 @@ There is no separate server; the **Electron main process is the backend**
   via `electron-store` (typed JSON in `userData`). Exposes CRUD operations
   (`getInstances`, `addInstance`, `removeInstance`, `getSelectedInstanceId`,
   `setSelectedInstanceId`) and a one-time `migrateFromLocalStorage` function.
-  Also provides a `safeStorage` wrapper (`encryptValue`/`decryptValue`) for
-  future secrets, with no encryption call sites yet.
+  Each environment records its default agent runtime (`opencode` or `claude`)
+  and opaque references to any wizard-owned credentials. The dedicated
+  `credential-vault.ts` store holds only `safeStorage`-encrypted credential
+  payloads. Removing an environment removes every credential it references.
 - **Window management** — single-instance lock, custom hidden titlebar with a
   Windows overlay, `ready-to-show` gating, and external links routed to the
   system browser via `setWindowOpenHandler`.
@@ -266,8 +269,8 @@ lives in the loop-task daemons. Local persistence uses two mechanisms:
 
 - **electron-store** (main process, `config-store.ts`): a typed JSON store in
   Electron's `userData` directory holding registered environments
-  (`Environment[]`), session tokens, the selected environment id, and related
-  state. Accessed by the renderer only through typed IPC channels. This
+  (`Environment[]`), opaque credential references, the selected environment id,
+  and related state. Accessed by the renderer only through typed IPC channels. This
   eliminates the renderer-side `localStorage` XSS surface from previous
   versions.
   All mutating operations are serialized through a `serialize()` wrapper that
@@ -276,14 +279,21 @@ lives in the loop-task daemons. Local persistence uses two mechanisms:
   Internal (private) `_impl` functions bypass the queue; only the public
   exported wrappers enter it — so cross-calls within a mutation (e.g.
   `storeSessionToken` → `setEnvironmentAuthState`) cannot deadlock.
+- **credentials electron-store** (main process, `credential-vault.ts`): a
+  separate local vault containing encrypted credential payloads keyed by opaque
+  random references. Wizard-generated daemon session tokens and optional SSH
+  key passphrases are encrypted with Electron `safeStorage` before write and
+  decrypted only for main-process consumers. Environment config never contains
+  these values or their ciphertext.
 - **window-bounds.json** (main, in Electron `userData`): window
   size/position/maximized state.
 
-A **safeStorage wrapper** (`config-store.ts`: `encryptValue`/`decryptValue`) is
-used to encrypt session tokens and OpenCode endpoint passwords before persisting
-them, using OS-native encryption (DPAPI on Windows, Keychain on macOS,
-libsecret on Linux). If `safeStorage.isEncryptionAvailable()` returns `false`,
-password storage is rejected — the `setOpenCodeEndpoint` IPC returns
+A **safeStorage wrapper** (`config-store.ts`: `encryptValue`/`decryptValue`) and
+the dedicated credential vault use OS-native encryption (DPAPI on Windows,
+Keychain on macOS, libsecret on Linux). Wizard session tokens and SSH key
+passphrases are stored in the vault; existing OpenCode endpoint passwords remain
+encrypted by the config store. If `safeStorage.isEncryptionAvailable()` returns
+`false`, credential storage is rejected. The `setOpenCodeEndpoint` IPC returns
 `{ ok: false, reason: "encryption-unavailable" }` and a dialog is shown to the
 user. The `wasEncrypted` flag on the internal `InternalOpenCodeEndpoint`
 type (main-process only, never exposed to renderer via IPC) tracks whether
@@ -368,11 +378,13 @@ keys, writes them into electron-store, and clears the keys. The renderer's
   `localStorage` exposed. The renderer accesses config only through the typed
   IPC contract.
 - **Encryption-at-rest readiness:** a `safeStorage` wrapper is available in
-  `config-store.ts` for encrypting secrets before they are persisted. Session
-  tokens and OpenCode endpoint passwords are encrypted via this wrapper. If
+  `config-store.ts` for encrypting legacy secrets, and `credential-vault.ts`
+  stores wizard credentials separately from environment config. Session tokens
+  and SSH key passphrases use opaque environment references; OpenCode endpoint
+  passwords remain encrypted through the config-store wrapper. If
   `safeStorage.isEncryptionAvailable()` returns `false` (e.g. Linux without
-  libsecret), password storage is **rejected** with a user-facing error —
-  passwords are never stored in plaintext. The `wasEncrypted` flag is kept on
+  libsecret), credential storage is **rejected** with a user-facing error.
+  Credentials are never stored in plaintext. The `wasEncrypted` flag is kept on
   an internal-only `InternalOpenCodeEndpoint` type and is stripped before
   environments are sent to the renderer via IPC.
 - **URL validation:** the main process rejects any base URL that is not
@@ -506,4 +518,4 @@ and screenshots without a daemon. This is a notable gap (see §15).
 - **Mock mode** — renderer running without `window.api` (plain browser), backed
   by `mock.ts`.
 
-<!-- Last updated: 2026-07-17T18:00:00Z -->
+<!-- Last updated: 2026-07-18T18:15:00Z -->

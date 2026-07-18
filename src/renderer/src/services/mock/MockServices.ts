@@ -18,9 +18,9 @@ import type {
   SessionScope,
   SetOpenCodeEndpointResult,
   PlatformType,
-  ReachMethod,
   SshHost,
   VmWizardResult,
+  VmWizardStartOptions,
   BudgetWatch,
   BudgetBreach,
   InboxItem,
@@ -118,12 +118,19 @@ let mockSelectedId: string | null = null;
 function loadMockEnvironments(): Environment[] {
   try {
     const raw = localStorage.getItem("orbion.envs.mock");
-    if (raw) { mockEnvironments = JSON.parse(raw); }
+    if (raw) {
+      const storedEnvironments = JSON.parse(raw) as Environment[];
+      mockEnvironments = storedEnvironments.map((environment) => ({
+        ...environment,
+        agentRuntime: environment.agentRuntime === "claude" ? "claude" : "opencode",
+      }));
+    }
   } catch { /* empty */ }
   if (mockEnvironments.length === 0) {
     mockEnvironments = [{
       id: "mock-env",
       name: "Mock VM",
+      agentRuntime: "opencode",
       endpoints: [{ id: "ep1", kind: "direct" as EndpointKind, url: "http://localhost:8845", lastError: null, failureCount: 0 }],
       activeEndpointId: "ep1",
     }];
@@ -146,6 +153,7 @@ export class MockConfigService implements IConfigService {
     const env: Environment = {
       id: Math.random().toString(36).slice(2, 10),
       name,
+      agentRuntime: "opencode",
       endpoints: [{ id: "ep1", kind, url, lastError: null, failureCount: 0 }],
       activeEndpointId: "ep1",
     };
@@ -239,8 +247,33 @@ export class MockOpenCodeService implements IOpenCodeService {
 @injectable()
 export class MockVmWizardService implements IVmWizardService {
   async listSshHosts(): Promise<SshHost[]> { return []; }
-  async startWizard(_target: string, _name?: string, _reachMethod?: ReachMethod, _directUrl?: string): Promise<VmWizardResult> {
-    return { environmentId: "mock", environmentName: "Mock", daemonUrl: "http://localhost:8845" };
+  async startWizard(options: VmWizardStartOptions): Promise<VmWizardResult> {
+    loadMockEnvironments();
+
+    const environmentId = Math.random().toString(36).slice(2, 10);
+    const environmentName = options.name?.trim() || options.target || "Mock";
+    const daemonUrl = options.directUrl ?? "http://localhost:8845";
+    const endpointKind: EndpointKind = options.reachMethod === "ssh" ? "ssh" : "direct";
+    const environment: Environment = {
+      id: environmentId,
+      name: environmentName,
+      agentRuntime: options.agentRuntime,
+      endpoints: [{
+        id: "ep1",
+        kind: endpointKind,
+        url: daemonUrl,
+        sshTarget: endpointKind === "ssh" ? options.target : null,
+        lastError: null,
+        failureCount: 0,
+      }],
+      activeEndpointId: "ep1",
+    };
+
+    mockEnvironments = [...mockEnvironments, environment];
+    mockSelectedId = environmentId;
+    saveMockEnvironments();
+
+    return { environmentId, environmentName, daemonUrl };
   }
   onProgress(): () => void { return () => {}; }
   cancelWizard(): void {}

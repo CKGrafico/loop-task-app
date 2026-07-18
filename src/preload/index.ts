@@ -14,6 +14,7 @@ import type {
   SetOpenCodeEndpointResult,
   VmWizardProgress,
   VmWizardResult,
+  VmWizardStartOptions,
   VmWizardServiceSelection,
   SshHost,
   InfraActionArgs,
@@ -147,8 +148,8 @@ const bridge: LoopTaskBridge = {
   vmWizard: {
     listSshHosts: () =>
       ipcRenderer.invoke("vmWizard:listSshHosts") as Promise<SshHost[]>,
-    startWizard: (target: string, name?: string, reachMethod?: string, directUrl?: string) =>
-      ipcRenderer.invoke("vmWizard:start", target, name, reachMethod, directUrl) as Promise<VmWizardResult>,
+    startWizard: (options: VmWizardStartOptions) =>
+      ipcRenderer.invoke("vmWizard:start", options) as Promise<VmWizardResult>,
     onProgress: (cb: (progress: VmWizardProgress) => void) => {
       const listener = (
         _event: Electron.IpcRendererEvent,
