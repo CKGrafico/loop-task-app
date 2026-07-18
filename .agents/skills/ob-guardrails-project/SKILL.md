@@ -72,7 +72,7 @@ license: MIT
 - **No database, the app owns no durable domain data.** All authoritative data lives in the loop-task daemons. Local persistence is limited to config and window bounds. Evidence: ARCHITECTURE.md §5.
 - **Config persistence: `electron-store` in the main process.** Typed JSON in Electron's `userData` directory. Holds `environments`, `selectedEnvironmentId`, `sessionTokens`. Accessed by the renderer ONLY through typed IPC channels. Evidence: ARCHITECTURE.md §5; `src/main/config-store.ts`.
 - **No `localStorage` for config.** Instance/environment data is stored in the main process via `electron-store`, eliminating the renderer-side XSS surface. `localStorage` is used only as a fallback in mock mode (browser-only dev with no Electron). Evidence: ARCHITECTURE.md §9, §14.
-- **Session tokens encrypted at rest via `safeStorage`.** `config-store.ts` provides `encryptValue`/`decryptValue` wrappers using OS-native encryption (DPAPI on Windows, Keychain on macOS, libsecret on Linux). Session tokens are stored as `EncryptedSessionToken` with `encryptedAccessToken`. Evidence: `src/main/config-store.ts` lines 20–24, 370+.
+- **Wizard credentials use a dedicated reference vault.** Environments store only opaque `credentialRefs`; `credential-vault.ts` stores `safeStorage`-encrypted session tokens and SSH key passphrases in a separate electron-store. Main-process consumers resolve references, and removing an environment deletes its owned vault entries. Never add credential values or ciphertext to `Environment`. Evidence: `src/main/credential-vault.ts`; `src/main/config-store.ts` credential functions.
 - **Window bounds persisted to `window-bounds.json`** in Electron's `userData` dir, debounced (500ms). Evidence: ARCHITECTURE.md §3.2; `src/main/index.ts` `saveBounds`.
 - **SSS subscriptions tracked in `Map<subId, AbortController>`** for clean teardown. Subscriptions are aborted on unsubscribe. Evidence: ARCHITECTURE.md §3.2; `src/main/index.ts` `streams` map.
 - **Log viewer caps in-memory lines at 2000 (`MAX_LINES`)** and starts from a 200-line tail. Evidence: ARCHITECTURE.md §11.
@@ -84,7 +84,7 @@ license: MIT
 - **URL validation: only `http:` and `https:` protocols allowed.** The main process `isAllowedBaseUrl()` rejects any other protocol before making a request. Evidence: `src/main/index.ts` lines 129–136.
 - **External links open in the system browser.** `setWindowOpenHandler` denies in-app navigation and routes links to the OS browser. Evidence: ARCHITECTURE.md §9.
 - **Trust boundary: renderer ⇄ preload ⇄ main.** Only the main process performs network and filesystem I/O. The preload is a pass-through typed bridge. Evidence: ARCHITECTURE.md §9.
-- **No secrets stored unencrypted.** Session tokens are encrypted via `safeStorage` before persistence. The `encryptValue`/`decryptValue` wrapper is available for any future secrets. Evidence: ARCHITECTURE.md §9; `src/main/config-store.ts`.
+- **No secrets stored unencrypted.** Wizard credentials are encrypted via `safeStorage` in the dedicated credential vault, with no plaintext fallback. Environment config contains references only. Existing OpenCode passwords use the config-store encryption wrapper. Evidence: ARCHITECTURE.md §5 and §9; `src/main/credential-vault.ts`; `src/main/config-store.ts`.
 - **Auth tokens injected at the main-process boundary.** `handleApiRequest` and SSE subscriptions attach `Authorization: Bearer <token>` headers only in the main process, never in the renderer. On 401, session tokens are removed and the environment auth state is set to `"blocked"`. Evidence: `src/main/index.ts` lines 165–179, 227–231.
 
 ## Dependencies
@@ -132,4 +132,4 @@ The following skills are installed in `.agents/skills/` and must be respected wh
 
 ### DI wiring rule: `inversify-hooks` container must be configured in `app/` layer (FSD). Features inject via `useInject`; they do not construct services directly.
 
-<!-- Last updated: 2026-07-16T14:30:00Z -->
+<!-- Last updated: 2026-07-18T18:15:00Z -->
