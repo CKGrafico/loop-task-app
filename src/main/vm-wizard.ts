@@ -1,9 +1,9 @@
-import type { SshHost, VmWizardProgress, VmWizardResult, VmWizardPairResult, VmWizardProbeResult, VmWizardServiceSelection, I18nMessage, ReachMethod } from "../shared/ipc.js";
+import type { AgentRuntime, SshHost, VmWizardProgress, VmWizardResult, VmWizardPairResult, VmWizardProbeResult, VmWizardServiceSelection, I18nMessage, ReachMethod, SessionToken, VmWizardStartOptions } from "../shared/ipc.js";
 import { TOOL_DEFINITIONS } from "../shared/tool-definitions.js";
 import { listSshHosts, parseTarget } from "./ssh-config.js";
 import { probeVm, installNodeViaMise } from "./ssh-probe.js";
 import { launchOnVm, createPairingCodeOnRemote } from "./ssh-launch.js";
-import { getEnvironments, addEnvironment, exchangePairingCode, storeSessionToken, setOpenCodeEndpoint, autoPromoteFirstEnvIfNeeded } from "./config-store.js";
+import { getEnvironments, addEnvironment, removeEnvironment, exchangePairingCode, storeSessionToken, storeSshKeyPassphrase, setOpenCodeEndpoint, autoPromoteFirstEnvIfNeeded } from "./config-store.js";
 import { getMainWindow } from "./main-window.js";
 import { msg } from "./i18n.js";
 import { fetchAndUnwrap } from "./http-utils.js";
@@ -50,11 +50,19 @@ function emitProgress(progress: VmWizardProgress): void {
   }
 }
 
-async function askServiceSelection(probe: VmWizardProbeResult, reachMethod: ReachMethod = "ssh"): Promise<VmWizardServiceSelection> {
+function runtimeToolId(agentRuntime: AgentRuntime): "openCode" | "claude" {
+  return agentRuntime === "opencode" ? "openCode" : "claude";
+}
+
+async function askServiceSelection(probe: VmWizardProbeResult, agentRuntime: AgentRuntime, reachMethod: ReachMethod = "ssh"): Promise<VmWizardServiceSelection> {
   // loop-task is mandatory (always installed). Defaults: install if not already detected.
   const installTools: Record<string, boolean> = {};
+  const selectedRuntimeToolId = runtimeToolId(agentRuntime);
   for (const tool of TOOL_DEFINITIONS) {
-    installTools[tool.id] = !probe.installedTools[tool.id];
+    const isRuntime = tool.id === "openCode" || tool.id === "claude";
+    installTools[tool.id] = isRuntime
+      ? tool.id === selectedRuntimeToolId && !probe.installedTools[tool.id]
+      : !probe.installedTools[tool.id];
   }
 
   const defaultSelection: VmWizardServiceSelection = {
@@ -73,6 +81,14 @@ async function askServiceSelection(probe: VmWizardProbeResult, reachMethod: Reac
   });
 
   if (wizardCancelled) throw new Error("vmWizard.mainCancelled");
+  if (!probe.installedTools[selectedRuntimeToolId]) {
+    return {
+      installTools: {
+        ...selection.installTools,
+        [selectedRuntimeToolId]: true,
+      },
+    };
+  }
   return selection;
 }
 
@@ -100,11 +116,38 @@ async function askConsent(
   return decision;
 }
 
-export async function runWizard(target: string, name?: string, reachMethod: ReachMethod = "ssh", directUrl?: string): Promise<VmWizardResult> {
+async function persistWizardCredentials(
+  environmentId: string,
+  sshKeyPassphrase: string | undefined,
+  sessionToken: SessionToken | null,
+  reachMethod: ReachMethod,
+): Promise<void> {
+  const hasPassphrase = sshKeyPassphrase !== undefined && sshKeyPassphrase.trim().length > 0;
+  if (hasPassphrase && !await storeSshKeyPassphrase(environmentId, sshKeyPassphrase)) {
+    await rollbackCredentialPersistence(environmentId, reachMethod);
+  }
+  if (sessionToken && !await storeSessionToken(environmentId, sessionToken)) {
+    await rollbackCredentialPersistence(environmentId, reachMethod);
+  }
+}
+
+async function rollbackCredentialPersistence(environmentId: string, reachMethod: ReachMethod): Promise<never> {
+  await removeEnvironment(environmentId);
+  emitProgress({
+    step: "error",
+    message: msg("vmWizard.mainCredentialEncryptionUnavailable"),
+    reachMethod,
+    probe: null,
+  });
+  throw new Error("vmWizard.mainCredentialEncryptionUnavailable");
+}
+
+export async function runWizard(options: VmWizardStartOptions): Promise<VmWizardResult> {
   resetWizardState();
+  const { target, name, reachMethod = "ssh", directUrl, agentRuntime, sshKeyPassphrase } = options;
 
   if (reachMethod === "local") {
-    return runLocalWizard(name ?? "Local", directUrl);
+    return runLocalWizard(name ?? "Local", directUrl, agentRuntime, sshKeyPassphrase);
   }
 
   // ── SSH path (original logic) ──────────────────────────────────────
@@ -296,7 +339,7 @@ export async function runWizard(target: string, name?: string, reachMethod: Reac
     throw new Error("vmWizard.mainCancelled");
   }
 
-  const serviceSelection = await askServiceSelection(probe);
+  const serviceSelection = await askServiceSelection(probe, agentRuntime);
 
   // Step 3: Install / Start
   if (wizardCancelled) {
@@ -344,7 +387,7 @@ export async function runWizard(target: string, name?: string, reachMethod: Reac
   const remoteCode = await createPairingCodeOnRemote(host, daemonPort);
   const pair: VmWizardPairResult = { paired: false, pairingCode: remoteCode, errorDetail: null };
 
-  let pendingToken: string | null = null;
+  let pendingToken: SessionToken | null = null;
 
   if (remoteCode) {
     pair.pairingCode = remoteCode;
@@ -367,12 +410,9 @@ export async function runWizard(target: string, name?: string, reachMethod: Reac
   // If no remoteCode, skip pairing progress entirely.
 
   // Step 4: Save environment (direct URL, daemon is reachable on the VM's IP)
-  const env = await addEnvironment(envName, daemonUrl, "ssh", host.label);
+  const env = await addEnvironment(envName, daemonUrl, "ssh", host.label, agentRuntime);
+  await persistWizardCredentials(env.id, sshKeyPassphrase, pair.paired ? pendingToken : null, "ssh");
   await autoPromoteFirstEnvIfNeeded();
-
-  if (pair.paired && pendingToken) {
-    await storeSessionToken(env.id, pendingToken);
-  }
 
   if (opencodePort) {
     await setOpenCodeEndpoint(env.id, {
@@ -402,7 +442,12 @@ export async function runWizard(target: string, name?: string, reachMethod: Reac
  * at a known URL (e.g. http://localhost:8845). No SSH, no install, no tunnel.
  * Validates reachability before persisting.
  */
-async function runLocalWizard(name: string, directUrl?: string): Promise<VmWizardResult> {
+async function runLocalWizard(
+  name: string,
+  directUrl: string | undefined,
+  agentRuntime: AgentRuntime,
+  sshKeyPassphrase: string | undefined,
+): Promise<VmWizardResult> {
   const url = directUrl ? trimTrailingSlash(directUrl.trim()) : "";
 
   // Validate URL format
@@ -450,7 +495,8 @@ async function runLocalWizard(name: string, directUrl?: string): Promise<VmWizar
   }
 
   // Save environment — local/direct, no SSH target
-  const env = await addEnvironment(name, url, "direct");
+  const env = await addEnvironment(name, url, "direct", undefined, agentRuntime);
+  await persistWizardCredentials(env.id, sshKeyPassphrase, null, "local");
   await autoPromoteFirstEnvIfNeeded();
 
   emitProgress({

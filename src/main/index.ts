@@ -29,6 +29,7 @@ import type {
   EditIssueResult,
   OutageEscalation,
   ResolvedInboxItem,
+  VmWizardStartOptions,
 } from "../shared/ipc.js";
 import type { Environment, SessionScope, NotificationSendArgs } from "../shared/ipc.js";
 import { trimTrailingSlash } from "../shared/utils.js";
@@ -765,8 +766,8 @@ app.whenReady().then(() => {
   });
 
   safeHandle("vmWizard:start", async (_event, ...rawArgs) => {
-    const [target, name, reachMethod, directUrl] = validateIpc<[string, string | undefined, import("../shared/ipc.js").ReachMethod | undefined, string | undefined]>("vmWizard:start", rawArgs);
-    const result = await runWizard(target, name, reachMethod ?? "ssh", directUrl);
+    const [options] = validateIpc<[VmWizardStartOptions]>("vmWizard:start", rawArgs);
+    const result = await runWizard(options);
     // After the wizard creates the environment, open SSH tunnels and
     // seed the connection supervisor so the new environment is immediately live.
     const envs = getEnvironments();

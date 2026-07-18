@@ -112,6 +112,9 @@ const SESSION_SCOPES = ["read-only", "operate", "admin"] as const;
 const API_METHODS = ["GET", "POST", "PATCH", "DELETE"] as const;
 const INFRA_ACTIONS = ["machine-status", "clone-repo", "create-issue", "detect-platform", "list-issues", "add-label"] as const;
 const CONSENT_DECISIONS = ["install", "skip"] as const;
+const AGENT_RUNTIMES = ["opencode", "claude"] as const;
+const REACH_METHODS = ["local", "ssh"] as const;
+const MAX_PASSPHRASE_LENGTH = 4096;
 
 /**
  * Registry: channel name → argument validator.
@@ -264,14 +267,34 @@ const validators: Record<string, Validator> = {
 
   "vmWizard:start": (args) => {
     const issues: string[] = [];
-    const target = args[0];
-    if (!isString(target) || target.length === 0 || target.length > 512) {
-      issues.push("target must be a string (1–512 chars)");
-    } else if (/[\x00-\x1f`$\\;"'&|<>(){}!\n\r]/.test(target)) {
-      issues.push("target contains disallowed characters");
+    if (args.length !== 1 || !isObject(args[0])) {
+      issues.push("exactly one options object is required");
+      return issues;
     }
-    if (args[1] !== undefined && !isString(args[1]))
-      issues.push("name must be a string if provided");
+    const options = args[0];
+    const reachMethod = options.reachMethod ?? "ssh";
+    if (!isEnum(options.agentRuntime, AGENT_RUNTIMES))
+      issues.push("agentRuntime must be one of opencode, claude");
+    if (options.reachMethod !== undefined && !isEnum(options.reachMethod, REACH_METHODS))
+      issues.push("reachMethod must be one of local, ssh");
+    if (options.name !== undefined && (!isString(options.name) || options.name.length > 256))
+      issues.push("name must be a string (max 256 chars) if provided");
+    if (options.directUrl !== undefined && (!isValidHttpUrl(options.directUrl) || options.directUrl.length > 2048))
+      issues.push("directUrl must be a valid http/https URL (max 2048 chars) if provided");
+    if (reachMethod === "local" && options.directUrl === undefined)
+      issues.push("directUrl is required for local reach method");
+    if (reachMethod === "ssh") {
+      const target = options.target;
+      if (!isString(target) || target.length === 0 || target.length > 512) {
+        issues.push("target must be a string (1-512 chars)");
+      } else if (/[\x00-\x1f`$\\;"'&|<>(){}!\n\r]/.test(target)) {
+        issues.push("target contains disallowed characters");
+      }
+    } else if (!isString(options.target)) {
+      issues.push("target must be a string");
+    }
+    if (options.sshKeyPassphrase !== undefined && (!isString(options.sshKeyPassphrase) || options.sshKeyPassphrase.length > MAX_PASSPHRASE_LENGTH))
+      issues.push(`sshKeyPassphrase must be a string (max ${MAX_PASSPHRASE_LENGTH} chars) if provided`);
     return issues;
   },
 
@@ -291,15 +314,13 @@ const validators: Record<string, Validator> = {
       return issues;
     }
     const sel = args[0] as Record<string, unknown>;
-    if (sel.installTools !== undefined) {
-      if (!isObject(sel.installTools)) {
-        issues.push("installTools must be an object");
-      } else {
-        const tools = sel.installTools as Record<string, unknown>;
-        for (const [key, val] of Object.entries(tools)) {
-          if (!isBoolean(val)) {
-            issues.push(`installTools.${key} must be a boolean`);
-          }
+    if (!isObject(sel.installTools)) {
+      issues.push("installTools must be an object");
+    } else {
+      const tools = sel.installTools;
+      for (const [key, val] of Object.entries(tools)) {
+        if (!isBoolean(val)) {
+          issues.push(`installTools.${key} must be a boolean`);
         }
       }
     }
