@@ -280,6 +280,48 @@ if [ -z "$DAEMON_SKIP" ]; then
   nohup loop-task serve --host 127.0.0.1 --port "\${DAEMON_PORT}" > "$LAUNCH_DIR/daemon.log" 2>&1 &
   DAEMON_PID=$!
   echo "$DAEMON_PID" > "$LAUNCH_DIR/daemon.pid"
+
+  daemon_ready() {
+    if command -v curl >/dev/null 2>&1; then
+      curl -sS -o /dev/null --connect-timeout 1 --max-time 1 "http://127.0.0.1:\${DAEMON_PORT}/api/projects" 2>/dev/null
+      return $?
+    fi
+
+    if command -v ss >/dev/null 2>&1; then
+      ss -tln 2>/dev/null | grep -Eq "127\\.0\\.0\\.1:\${DAEMON_PORT}[[:space:]]"
+    elif command -v lsof >/dev/null 2>&1; then
+      lsof -nP -iTCP:"\${DAEMON_PORT}" -sTCP:LISTEN 2>/dev/null | grep -q "127.0.0.1:\${DAEMON_PORT}"
+    elif command -v netstat >/dev/null 2>&1; then
+      netstat -an 2>/dev/null | grep -Eq "127\\.0\\.0\\.1[.:]\${DAEMON_PORT}[[:space:]].*LISTEN"
+    elif command -v nc >/dev/null 2>&1; then
+      nc -z 127.0.0.1 "\${DAEMON_PORT}" >/dev/null 2>&1
+    else
+      return 1
+    fi
+  }
+
+  DAEMON_READY=""
+  STARTUP_ATTEMPT=0
+  while [ "$STARTUP_ATTEMPT" -lt 20 ]; do
+    if ! kill -0 "$DAEMON_PID" 2>/dev/null; then
+      break
+    fi
+    if daemon_ready && kill -0 "$DAEMON_PID" 2>/dev/null; then
+      DAEMON_READY=1
+      break
+    fi
+    STARTUP_ATTEMPT=$((STARTUP_ATTEMPT + 1))
+    sleep 1
+  done
+
+  if [ -z "$DAEMON_READY" ]; then
+    echo "DAEMON_START_FAILED"
+    cat "$LAUNCH_DIR/daemon.log" 2>/dev/null || true
+    kill "$DAEMON_PID" 2>/dev/null || true
+    rm -f "$LAUNCH_DIR/daemon.pid" "$LAUNCH_DIR/daemon.info"
+    exit 1
+  fi
+
   echo "port=\${DAEMON_PORT}" > "$LAUNCH_DIR/daemon.info"
   echo "DAEMON_STARTED|\${DAEMON_PORT}|\${DAEMON_PID}"
 fi
@@ -498,6 +540,9 @@ export async function launchOnVm(
         result.errorDetail = msg("vmWizard.mainNodeNotFoundOnVm");
       } else if (trimmed === "INSTALL_FAILED_LOOP_TASK") {
         result.errorDetail = msg("vmWizard.mainInstallLoopTaskFailed");
+        result.loopTaskStatus = "failed";
+      } else if (trimmed === "DAEMON_START_FAILED") {
+        result.errorDetail = msg("vmWizard.mainFailedToStartServices");
         result.loopTaskStatus = "failed";
       } else if (trimmed.startsWith("DAEMON_PORT_BUSY|")) {
         result.errorDetail = msg("vmWizard.mainDaemonPortBusy", { port: daemonPort });
