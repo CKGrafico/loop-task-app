@@ -32,6 +32,7 @@ import type {
   DeepLinkTarget,
   NotificationSendArgs,
   OutageEscalation,
+  ReachabilityStatus,
 } from "../../../../shared/ipc";
 import { kindToNotificationType } from "../../../../shared/ipc";
 import type { LoopMeta, Project, TaskDefinition } from "../../types";
@@ -49,6 +50,7 @@ import type {
   IInboxService,
   InboxBuildParams,
   IOutageService,
+  IReachabilityService,
 } from "../interfaces";
 
 const now = Date.now();
@@ -685,5 +687,35 @@ export class MockOutageService implements IOutageService {
 
   onResolve(): () => void {
     return () => {};
+  }
+}
+
+@injectable()
+export class MockReachabilityService implements IReachabilityService {
+  private listeners: ((status: ReachabilityStatus) => void)[] = [];
+
+  async getStatus(environmentId: string): Promise<ReachabilityStatus | null> {
+    // Mock environments are always connected
+    return {
+      environmentId,
+      state: "connected",
+      changedAt: new Date().toISOString(),
+    };
+  }
+
+  async getAll(): Promise<ReachabilityStatus[]> {
+    const envs = await new MockConfigService().getEnvironments();
+    return envs.map((env) => ({
+      environmentId: env.id,
+      state: "connected" as const,
+      changedAt: new Date().toISOString(),
+    }));
+  }
+
+  onStatusChange(cb: (status: ReachabilityStatus) => void): () => void {
+    this.listeners.push(cb);
+    return () => {
+      this.listeners = this.listeners.filter((l) => l !== cb);
+    };
   }
 }

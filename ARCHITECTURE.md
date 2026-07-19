@@ -39,6 +39,7 @@ orbion/
 │   │   ├── config-store.ts     # electron-store config + safeStorage wrapper
 │   │   ├── credential-vault.ts # Dedicated safeStorage-encrypted credential records
 │   │   ├── connection-supervisor.ts  # Periodic health probes + SSE reconnect
+│   │   ├── reachability-tracker.ts   # Instance reachability as its own health layer (connected/reconnecting/unreachable)
 │   │   ├── opencode-client.ts  # OpenCode server status + version checks
 │   │   ├── platform-classifier.ts  # Git remote URL → platform classification
 │   │   └── ssh-probe.ts        # SSH VM, Node 20+, loop-task, and daemon probing
@@ -186,7 +187,7 @@ IPC handlers registered on `app.whenReady`: `api:request`, `stream:subscribe`,
 `budget:updateWatch`, `budget:getBreaches`, `budget:addBreach`,
 `budget:dismissBreach`, `inbox:getItems`, `inbox:dismissItem`,
 `inbox:queryFleet`, `inbox:resolveItem`, `inbox:getResolvedItems`,
-`inbox:pruneResolvedItems`. The inbox service also performs inline
+`inbox:pruneResolvedItems`, `reachability:getStatus`, `reachability:getAll`. The inbox service also performs inline
 actions (`run-now`, `pause`, `resume`, `restart`, `dismiss`, `open-in-chat`)
 via its `executeInboxAction` method, which calls the same loop-task API
 endpoints as the loop card (`POST /api/loops/:id/trigger`,
@@ -427,8 +428,14 @@ keys, writes them into electron-store, and clears the keys. The renderer's
 
 ## 10. Monitoring & Observability
 
-- **Health:** per-instance connectivity dots (`ok` / `offline` / `unknown`)
+- **Health:** per-instance connectivity dots (`ok` / `offline` / `unknown` / `connecting` / `backoff` / `blocked`)
   driven by poll/health-check results.
+- **Reachability:** a first-class health layer, distinct from loop data. Each instance
+  carries reachability `connected` / `reconnecting` / `unreachable`, derived from tunnel
+  + API health (ConnectionPhase), **never** from loop exit codes. Loops on an
+  unreachable instance render as "unknown" (greyed) and are excluded from failure
+  tallies. This ensures a dropped tunnel never reads as "loop failed." The state is
+  exposed to the renderer as a first-class field via the `reachability` IPC bridge.
 - **Logs:** the app *views* daemon logs; it does not emit structured telemetry
   of its own.
 - **Metrics / tracing / error reporting:** Not evident from the repository.

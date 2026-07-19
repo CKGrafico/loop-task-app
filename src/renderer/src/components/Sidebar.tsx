@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from "react";
 import { useIntl, type IntlShape } from "react-intl";
-import type { ConnectionStatus } from "../../../shared/ipc";
+import type { ConnectionStatus, ReachabilityState } from "../../../shared/ipc";
 import type { Environment, EnvironmentHealth, LoopMeta, Project } from "../types";
 import { getPillLabel, PILL_COLORS } from "../fleet-status";
 import { loopStatusToFleetItem } from "../fleet-mapping";
@@ -59,11 +59,15 @@ function TreeNodeChevron({ expanded, hasChildren, onClick }: TreeNodeChevronProp
 interface LoopStatusDotProps {
   status: LoopMeta["status"];
   lastExitCode: number | null;
+  /** When the instance is unreachable/reconnecting, loops render as unknown (greyed). */
+  reachability?: ReachabilityState;
 }
 
-function LoopStatusDot({ status, lastExitCode }: LoopStatusDotProps): React.ReactNode {
-  const fleetItem = loopStatusToFleetItem(status, lastExitCode);
-  const color = PILL_COLORS[fleetItem];
+function LoopStatusDot({ status, lastExitCode, reachability }: LoopStatusDotProps): React.ReactNode {
+  const fleetItem = loopStatusToFleetItem(status, lastExitCode, reachability);
+  const color = reachability === "unreachable" || reachability === "reconnecting"
+    ? "var(--health-offline)"
+    : PILL_COLORS[fleetItem];
   return <span className="tree-dot" style={{ background: color }} />;
 }
 
@@ -72,11 +76,15 @@ function projectHasFailedLoop(
   loops: LoopMeta[],
   envId: string,
   health: Record<string, EnvironmentHealth>,
+  reachability?: Record<string, ReachabilityState>,
 ): boolean {
   const h = health[envId] ?? "unknown";
-  // Unreachable instances (offline, blocked, unknown) must NOT trigger the pip
+  const r = reachability?.[envId];
+  // Unreachable/reconnecting instances must NOT trigger the pip — their loops
+  // are "unknown", not "failed"
+  if (r === "unreachable" || r === "reconnecting") return false;
   if (h !== "ok" && h !== "connecting" && h !== "backoff") return false;
-  return loops.some((loop) => loopStatusToFleetItem(loop.status, loop.lastExitCode) === "failed");
+  return loops.some((loop) => loopStatusToFleetItem(loop.status, loop.lastExitCode, r) === "failed");
 }
 
 /** A flattened project-instance node for the 2-level tree */
@@ -98,6 +106,8 @@ export function Sidebar(props: {
   perEnvLoops: Record<string, LoopMeta[]>;
   perEnvProjects: Record<string, Project[]>;
   view: View;
+  /** Per-environment reachability state (its own health layer, separate from loop status). */
+  reachability?: Record<string, ReachabilityState>;
   onSelect: (id: string) => void;
   onNavigate: (view: View) => void;
   onAddVm?: () => void;
@@ -116,6 +126,7 @@ export function Sidebar(props: {
     perEnvLoops, perEnvProjects, view, onNavigate,
     onSelect, onAddVm, fleetActivityEnabled, inboxItemCount,
     onNavigateToLoop, onNavigateToProject, onNavigateToInbox,
+    reachability,
   } = props;
   const intl = useIntl();
 
@@ -318,7 +329,7 @@ export function Sidebar(props: {
                   />
                   <span className="tree-dot-wrap">
                     <span className="tree-dot" style={{ background: node.projectColor }} />
-                    {projectHasFailedLoop(node.loops, node.envId, health) ? (
+                    {projectHasFailedLoop(node.loops, node.envId, health, reachability) ? (
                       <span className="tree-dot-pip" title={intl.formatMessage({ id: "sidebar.projectHasFailure" })} />
                     ) : null}
                   </span>
@@ -337,8 +348,10 @@ export function Sidebar(props: {
                     {node.loops.map((loop) => {
                       const loopSelected = isLoopSelected(loop.id);
                       const loopTitle = loop.description?.trim() || loop.id;
-                      const fleetItem = loopStatusToFleetItem(loop.status, loop.lastExitCode);
-                      const loopColor = PILL_COLORS[fleetItem];
+                      const envReachability = reachability?.[node.envId];
+                      const fleetItem = loopStatusToFleetItem(loop.status, loop.lastExitCode, envReachability);
+                      const isUnreachable = envReachability === "unreachable" || envReachability === "reconnecting";
+                      const loopColor = isUnreachable ? "var(--health-offline)" : PILL_COLORS[fleetItem];
 
                       return (
                         <div
@@ -350,14 +363,14 @@ export function Sidebar(props: {
                           }}
                         >
                           <span className="tree-chevron placeholder"><ChevronRight size={10} /></span>
-                          <LoopStatusDot status={loop.status} lastExitCode={loop.lastExitCode} />
+                          <LoopStatusDot status={loop.status} lastExitCode={loop.lastExitCode} reachability={envReachability} />
                           <span className="tree-label">{loopTitle}</span>
                           <span
                             className="tree-loop-status"
                             style={{ color: loopColor }}
-                            title={getPillLabel(fleetItem)}
+                            title={isUnreachable ? intl.formatMessage({ id: "sidebar.loopUnknown" }) : getPillLabel(fleetItem)}
                           >
-                            {getPillLabel(fleetItem)}
+                            {isUnreachable ? intl.formatMessage({ id: "sidebar.loopUnknown" }) : getPillLabel(fleetItem)}
                           </span>
                           <span className="tree-loop-runcount">
                             {loop.runCount > 0 ? `${loop.runCount}r` : ""}
@@ -378,6 +391,7 @@ export function Sidebar(props: {
           environments={environments}
           health={health}
           perEnvLoops={perEnvLoops}
+          reachability={reachability}
           onNavigateToLoop={(envId, loopId) => {
             onSelect(envId);
             onNavigateToLoop?.(envId, loopId);

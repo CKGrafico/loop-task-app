@@ -1,6 +1,7 @@
 import { useMemo, useCallback } from "react";
 import { useIntl } from "react-intl";
 import type { EnvironmentHealth, LoopMeta } from "../types";
+import type { ReachabilityState } from "../../../shared/ipc";
 import { loopStatusToFleetItem } from "../fleet-mapping";
 import type { FleetItemStatus } from "../fleet-status";
 import { AlertTriangle, WifiOff } from "lucide-react";
@@ -22,6 +23,8 @@ export function FleetHealthFooter(props: {
   environments: { id: string; name: string }[];
   health: Record<string, EnvironmentHealth>;
   perEnvLoops: Record<string, LoopMeta[]>;
+  /** Per-environment reachability (its own health layer, separate from loop status). */
+  reachability?: Record<string, ReachabilityState>;
   onNavigateToLoop: (envId: string, loopId: string) => void;
   onNavigateToProject: (envId: string, projectId: string) => void;
   onNavigateToInbox: () => void;
@@ -35,6 +38,7 @@ export function FleetHealthFooter(props: {
     onNavigateToProject,
     onNavigateToInbox,
     onSelectEnvironment,
+    reachability,
   } = props;
   const intl = useIntl();
 
@@ -50,20 +54,26 @@ export function FleetHealthFooter(props: {
 
     for (const env of environments) {
       const h = health[env.id] ?? "unknown";
+      const r = reachability?.[env.id];
+
       if (h === "ok") {
         connected++;
       } else if (h === "offline" || h === "blocked" || h === "unknown") {
         unreachable.push({ envId: env.id, envName: env.name });
       }
 
-      // Only count failures from reachable environments
-      if (h === "ok" || h === "connecting" || h === "backoff") {
+      // Only count failures from reachable environments.
+      // Loops on unreachable/reconnecting instances are "unknown" (greyed),
+      // NOT "failed" — a dropped tunnel never reads as your work failing.
+      const isReachable = r === "connected" || r === undefined;
+      if ((h === "ok" || h === "connecting" || h === "backoff") && isReachable) {
         const envLoops = perEnvLoops[env.id] ?? [];
 
         for (const loop of envLoops) {
           const fleetItem: FleetItemStatus = loopStatusToFleetItem(
             loop.status,
             loop.lastExitCode,
+            r,
           );
           if (fleetItem === "failed") {
             const projectId = loop.projectId ?? "default";
@@ -85,7 +95,7 @@ export function FleetHealthFooter(props: {
       failedLoopDetails: failed,
       unreachableEnvDetails: unreachable,
     };
-  }, [environments, health, perEnvLoops]);
+  }, [environments, health, perEnvLoops, reachability]);
 
   const handleFailureClick = useCallback(() => {
     if (failedLoopDetails.length === 0) return;
