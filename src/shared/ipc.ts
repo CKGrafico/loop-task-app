@@ -525,6 +525,35 @@ export interface InboxBridge {
   pruneResolvedItems: () => Promise<void>;
 }
 
+// ── Reachability (instance health layer, separate from loop status) ───
+
+/**
+ * Instance reachability state, derived from tunnel + API health.
+ * NEVER derived from loop exit codes.
+ *
+ * - "connected": the daemon API is reachable and responding.
+ * - "reconnecting": tunnel/API is temporarily lost, auto-reconnect in progress.
+ * - "unreachable": no path to the daemon (offline, blocked, or tunnel down).
+ */
+export type ReachabilityState = "connected" | "reconnecting" | "unreachable";
+
+/** Timestamped reachability snapshot for an environment. */
+export interface ReachabilityStatus {
+  environmentId: string;
+  state: ReachabilityState;
+  /** ISO timestamp of the last state transition. */
+  changedAt: string;
+}
+
+export interface ReachabilityBridge {
+  /** Get current reachability for a single environment. */
+  getStatus: (environmentId: string) => Promise<ReachabilityStatus | null>;
+  /** Get current reachability for all environments. */
+  getAll: () => Promise<ReachabilityStatus[]>;
+  /** Subscribe to reachability state changes. */
+  onStatusChange: (cb: (status: ReachabilityStatus) => void) => () => void;
+}
+
 // ── Prolonged-outage escalation ────────────────────────────────────
 
 export interface OutageEscalation {
@@ -678,4 +707,5 @@ export interface LoopTaskBridge {
   watch: ConditionWatchBridge;
   notification: NotificationBridge;
   outage: OutageBridge;
+  reachability: ReachabilityBridge;
 }

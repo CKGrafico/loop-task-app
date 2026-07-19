@@ -401,6 +401,15 @@ const validators: Record<string, Validator> = {
   },
 
   "infra:getStatus": () => [],
+
+  // ── Reachability ─────────────────────────────────────────
+  "reachability:getStatus": (args) => {
+    const issues: string[] = [];
+    if (!isNonEmptyString(args[0])) issues.push("environmentId must be a non-empty string");
+    return issues;
+  },
+
+  "reachability:getAll": () => [],
 };
 
 // ── Structured IPC error result ───────────────────────────────────────

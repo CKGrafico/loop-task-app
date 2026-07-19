@@ -33,6 +33,7 @@ import type {
   DeepLinkTarget,
   NotificationSendArgs,
   OutageEscalation,
+  ReachabilityStatus,
 } from "../../../shared/ipc";
 import type { LoopMeta, EnvironmentHealth } from "../types";
 
@@ -150,4 +151,10 @@ export interface IOutageService {
   getEscalations(): Promise<OutageEscalation[]>;
   onEscalation(cb: (event: OutageEscalation) => void): () => void;
   onResolve(cb: (environmentId: string) => void): () => void;
+}
+
+export interface IReachabilityService {
+  getStatus(environmentId: string): Promise<ReachabilityStatus | null>;
+  getAll(): Promise<ReachabilityStatus[]>;
+  onStatusChange(cb: (status: ReachabilityStatus) => void): () => void;
 }

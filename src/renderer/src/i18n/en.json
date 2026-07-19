@@ -83,7 +83,8 @@
     "connectInstance": "Connect instance",
     "newProject": "New project",
     "inbox": "Inbox",
-    "projectHasFailure": "A loop in this project has failed"
+    "projectHasFailure": "A loop in this project has failed",
+    "loopUnknown": "unknown"
   },
   "vmWizard": {
     "stepPickReachMethod": "Choose reach method",

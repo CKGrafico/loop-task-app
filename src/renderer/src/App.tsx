@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useIntl } from "react-intl";
-import type { ConnectionStatus, EndpointHealth, OpenCodeConnectionStatus, BudgetBreach, DeepLinkTarget, OutageEscalation } from "../../shared/ipc";
+import type { ConnectionStatus, EndpointHealth, OpenCodeConnectionStatus, BudgetBreach, DeepLinkTarget, OutageEscalation, ReachabilityState } from "../../shared/ipc";
 import type { Environment, EnvironmentHealth, LoopMeta, Project } from "./types";
 import type { FleetItemStatus } from "./fleet-status";
 import { rollUpEnvironmentStatus, isNotifiableStatus } from "./fleet-status";
@@ -27,7 +27,7 @@ import { BudgetWatchPanel } from "./components/BudgetWatchPanel";
 import { hostLabel, timeAgo } from "./format";
 import { translateMessage, standaloneIntl } from "./i18n";
 import { cid, useInject } from "inversify-hooks";
-import type { IConnectionService, IOpenCodeService, IOutageService, IInboxService, InboxBuildParams } from "./services/interfaces";
+import type { IConnectionService, IOpenCodeService, IOutageService, IInboxService, IReachabilityService, InboxBuildParams } from "./services/interfaces";
 import { InfraChatPanel } from "./components/InfraChatPanel";
 
 type View =
@@ -72,6 +72,7 @@ export function App(): React.ReactNode {
   const [connectionService] = useInject<IConnectionService>(cid.IConnectionService);
   const [openCodeService] = useInject<IOpenCodeService>(cid.IOpenCodeService);
   const [outageService] = useInject<IOutageService>(cid.IOutageService);
+  const [reachabilityService] = useInject<IReachabilityService>(cid.IReachabilityService);
   const [inboxService] = useInject<IInboxService>(cid.IInboxService);
   const [view, setView] = useState<View>({ kind: "instance" });
   const [vmWizardOpen, setVmWizardOpen] = useState(false);
@@ -184,6 +185,9 @@ export function App(): React.ReactNode {
   // Outage escalation tracking
   const [escalatedOutages, setEscalatedOutages] = useState<Map<string, OutageEscalation>>(new Map());
 
+  // Reachability state (its own health layer, separate from loop status)
+  const [reachability, setReachability] = useState<Record<string, ReachabilityState>>({});
+
   // Load existing escalations on mount and subscribe to live events
   useEffect(() => {
     let cancelled = false;
@@ -220,6 +224,45 @@ export function App(): React.ReactNode {
       unsubResolve();
     };
   }, [outageService]);
+
+  // Subscribe to reachability state changes (its own health layer)
+  useEffect(() => {
+    const unsub = reachabilityService.onStatusChange(
+      (status) => {
+        setReachability((prev) =>
+          prev[status.environmentId] === status.state
+            ? prev
+            : { ...prev, [status.environmentId]: status.state },
+        );
+      },
+    );
+    return unsub;
+  }, [reachabilityService]);
+
+  // Load initial reachability state on mount
+  useEffect(() => {
+    if (isMock || environments.length === 0) return;
+    let cancelled = false;
+
+    const load = async (): Promise<void> => {
+      const all = await reachabilityService.getAll();
+      if (cancelled) return;
+      const map: Record<string, ReachabilityState> = {};
+      for (const s of all) {
+        map[s.environmentId] = s.state;
+      }
+      setReachability((prev) => {
+        // Only update if anything changed
+        for (const [k, v] of Object.entries(map)) {
+          if (prev[k] !== v) return map;
+        }
+        return prev;
+      });
+    };
+
+    void load();
+    return () => { cancelled = true; };
+  }, [environments, reachabilityService]);
 
   const selected: Environment | null = environments.find((e) => e.id === selectedId) ?? null;
 
@@ -313,13 +356,14 @@ export function App(): React.ReactNode {
     const result: Record<string, FleetItemStatus> = {};
     for (const env of environments) {
       const envLoops = perEnvLoops[env.id] ?? [];
+      const envReachability = reachability[env.id];
       const childStatuses: FleetItemStatus[] = envLoops.map((l) =>
-        loopStatusToFleetItem(l.status, l.lastExitCode),
+        loopStatusToFleetItem(l.status, l.lastExitCode, envReachability),
       );
       result[env.id] = rollUpEnvironmentStatus(childStatuses);
     }
     return result;
-  }, [environments, perEnvLoops]);
+  }, [environments, perEnvLoops, reachability]);
 
   const unreadEnvs = useMemo<Set<string>>(() => {
     const ids = new Set<string>();
@@ -779,6 +823,7 @@ export function App(): React.ReactNode {
                   perEnvLoops={perEnvLoops}
                   perEnvProjects={perEnvProjects}
                   view={view}
+                  reachability={reachability}
                   onSelect={handleSelect}
                   onNavigate={handleNavigate}
                   onAddVm={() => setVmWizardOpen(true)}

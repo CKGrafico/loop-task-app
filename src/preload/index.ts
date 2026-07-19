@@ -29,6 +29,7 @@ import type {
   NotificationSendArgs,
   DeepLinkTarget,
   OutageEscalation,
+  ReachabilityStatus,
 } from "../shared/ipc.js";
 
 const bridge: LoopTaskBridge = {
@@ -272,6 +273,25 @@ const bridge: LoopTaskBridge = {
     },
     getEscalations: () =>
       ipcRenderer.invoke("outage:getEscalations") as Promise<OutageEscalation[]>,
+  },
+
+  reachability: {
+    getStatus: (environmentId: string) =>
+      ipcRenderer.invoke("reachability:getStatus", environmentId) as Promise<ReachabilityStatus | null>,
+    getAll: () =>
+      ipcRenderer.invoke("reachability:getAll") as Promise<ReachabilityStatus[]>,
+    onStatusChange: (cb: (status: ReachabilityStatus) => void) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        status: ReachabilityStatus,
+      ): void => {
+        cb(status);
+      };
+      ipcRenderer.on("reachability:status", listener);
+      return () => {
+        ipcRenderer.removeListener("reachability:status", listener);
+      };
+    },
   },
 };
 

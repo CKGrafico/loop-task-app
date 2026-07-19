@@ -30,6 +30,7 @@ import type {
   OutageEscalation,
   ResolvedInboxItem,
   VmWizardStartOptions,
+  ReachabilityStatus,
 } from "../shared/ipc.js";
 import type { Environment, SessionScope, NotificationSendArgs } from "../shared/ipc.js";
 import { trimTrailingSlash } from "../shared/utils.js";
@@ -89,6 +90,7 @@ import { validateIpc, safeHandle, IpcValidationError } from "./ipc-validation.js
 import { setMainWindow, getMainWindow } from "./main-window.js";
 import { NotificationService } from "./notification-service.js";
 import { OutageTracker } from "./outage-tracker.js";
+import { ReachabilityTracker } from "./reachability-tracker.js";
 import {
   openTunnelsForEnvironment,
   openTunnelForEndpoint,
@@ -132,6 +134,8 @@ const outageTracker = new OutageTracker(
   },
 );
 
+const reachabilityTracker = new ReachabilityTracker();
+
 // Wire tunnel auto-reconnect into the connection supervisor.
 // When a tunnel drops, the supervisor will see probe failures and enter backoff.
 // When the tunnel reconnects, wake up the supervisor immediately so it probes
@@ -158,16 +162,23 @@ function getOrCreateSupervisor(environmentId: string, baseUrl: string): Connecti
   if (existing) return existing;
 
     const supervisor = new ConnectionSupervisor(
-    makeProbe(baseUrl, environmentId),
-    (status: ConnectionStatus) => {
-      const win = getMainWindow();
-      if (win) {
-        win.webContents.send("connection:status", environmentId, status);
-      }
-      // Feed status changes to the outage tracker
-      outageTracker.handleStatusChange(environmentId, status);
-    },
-  );
+     makeProbe(baseUrl, environmentId),
+     (status: ConnectionStatus) => {
+       const win = getMainWindow();
+       if (win) {
+         win.webContents.send("connection:status", environmentId, status);
+       }
+       // Feed status changes to the outage tracker
+       outageTracker.handleStatusChange(environmentId, status);
+       // Feed status changes to the reachability tracker (its own health layer)
+       reachabilityTracker.handleConnectionPhaseChange(environmentId, status.phase);
+       // Forward reachability changes to the renderer
+       const reachabilityStatus = reachabilityTracker.getStatus(environmentId);
+       if (reachabilityStatus && win && !win.isDestroyed()) {
+         win.webContents.send("reachability:status", reachabilityStatus);
+       }
+     },
+   );
   supervisors.set(environmentId, supervisor);
   supervisor.start();
   return supervisor;
@@ -212,6 +223,7 @@ function removeSupervisor(environmentId: string): void {
     endpointTrackers.delete(environmentId);
   }
   outageTracker.removeEnvironment(environmentId);
+  reachabilityTracker.removeEnvironment(environmentId);
   closeTunnelsForEnvironment(environmentId);
 }
 
@@ -1451,6 +1463,18 @@ app.whenReady().then(() => {
       }
     }
     return result;
+  });
+
+  // ── Reachability (instance health layer, separate from loop status) ───
+
+  safeHandle("reachability:getStatus", (_event, ...rawArgs): ReachabilityStatus | null => {
+    const [environmentId] = validateIpc<[string]>("reachability:getStatus", rawArgs);
+    return reachabilityTracker.getStatus(environmentId);
+  });
+
+  safeHandle("reachability:getAll", (): ReachabilityStatus[] => {
+    validateIpc("reachability:getAll", []);
+    return reachabilityTracker.getAll();
   });
 
   // Prune old breaches on startup
