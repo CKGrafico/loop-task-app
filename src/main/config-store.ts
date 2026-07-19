@@ -435,10 +435,10 @@ function isSessionScope(value: unknown): value is SessionScope {
   return value === "read-only" || value === "operate" || value === "admin";
 }
 
-function queueLegacySessionTokenMaintenance(environmentId: string, token?: SessionToken): void {
-  if (pendingLegacyTokenMaintenance.has(environmentId)) return;
+function queueLegacySessionTokenMaintenance(environmentId: string, token?: SessionToken): Promise<void> {
+  if (pendingLegacyTokenMaintenance.has(environmentId)) return Promise.resolve();
   pendingLegacyTokenMaintenance.add(environmentId);
-  void serialize(() => {
+  return serialize(() => {
     if (token) {
       migrateLegacySessionToken(environmentId, token);
     } else {
@@ -446,7 +446,7 @@ function queueLegacySessionTokenMaintenance(environmentId: string, token?: Sessi
     }
   }).then(
     () => { pendingLegacyTokenMaintenance.delete(environmentId); },
-    () => { pendingLegacyTokenMaintenance.delete(environmentId); },
+    (err) => { pendingLegacyTokenMaintenance.delete(environmentId); throw err; },
   );
 }
 
@@ -1130,8 +1130,8 @@ export function getExpandedProjects(): string[] {
   return store.get("expandedProjects", []);
 }
 
-export function setExpandedProjects(expandedKeys: string[]): void {
-  void serialize(() => {
+export function setExpandedProjects(expandedKeys: string[]): Promise<void> {
+  return serialize(() => {
     store.set("expandedProjects", expandedKeys);
   });
 }
