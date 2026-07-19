@@ -10,6 +10,7 @@
 
 import { ipcMain } from "electron";
 import { isAllowedApiOperation, isAllowedStreamPath } from "../shared/daemon-allowlist.js";
+import type { InfraAction } from "../shared/ipc.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -111,7 +112,12 @@ function makeOpenCodeEndpointValidator(): Validator {
 const ENDPOINT_KINDS = ["direct", "ssh", "tailscale"] as const;
 const SESSION_SCOPES = ["read-only", "operate", "admin"] as const;
 const API_METHODS = ["GET", "POST", "PATCH", "DELETE"] as const;
-const INFRA_ACTIONS = ["machine-status", "clone-repo", "create-issue", "detect-platform", "list-issues", "add-label"] as const;
+const INFRA_ACTIONS = ["machine-status", "clone-repo", "create-issue", "detect-platform", "list-issues", "add-label", "edit-issue"] as const;
+
+// Compile-time exhaustiveness check: if a new InfraAction is added to the
+// shared type but omitted from INFRA_ACTIONS, this assignment will fail.
+// This prevents the validation/implementation drift described in issue #219.
+const _infraActionsExhaustive: InfraAction[] = [...INFRA_ACTIONS];
 const CONSENT_DECISIONS = ["install", "skip"] as const;
 const AGENT_RUNTIMES = ["opencode", "claude"] as const;
 const REACH_METHODS = ["local", "ssh"] as const;
@@ -450,11 +456,41 @@ const validators: Record<string, Validator> = {
       issues.push("action must be a valid infra action");
     if (a.params !== undefined && !isObject(a.params))
       issues.push("params must be an object if provided");
+
+    // Per-action param validation at the IPC boundary.
+    // These checks prevent type-confused or missing fields from reaching business logic.
+    const params = (a.params ?? {}) as Record<string, unknown>;
+
     if (a.action === "clone-repo") {
-      const params = a.params as Record<string, unknown> | undefined;
-      if (!params || !isNonEmptyString(params.repoUrl))
+      if (!isNonEmptyString(params.repoUrl))
         issues.push("params.repoUrl is required for clone-repo");
     }
+
+    if (a.action === "create-issue") {
+      if (!isNonEmptyString(params.title))
+        issues.push("params.title is required for create-issue");
+    }
+
+    if (a.action === "add-label") {
+      if (!isNumber(params.issueNumber))
+        issues.push("params.issueNumber must be a number for add-label");
+      if (!Array.isArray(params.labels)) {
+        issues.push("params.labels must be an array for add-label");
+      } else {
+        for (let i = 0; i < params.labels.length; i++) {
+          if (!isString((params.labels as unknown[])[i])) {
+            issues.push(`params.labels[${i}] must be a string for add-label`);
+            break;
+          }
+        }
+      }
+    }
+
+    if (a.action === "edit-issue") {
+      if (!isNumber(params.issueNumber))
+        issues.push("params.issueNumber must be a number for edit-issue");
+    }
+
     return issues;
   },
 

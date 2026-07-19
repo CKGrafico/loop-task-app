@@ -1,4 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+// Mock electron before importing the module under test
+vi.mock("electron", () => ({
+  ipcMain: { handle: vi.fn() },
+}));
+
 import { isAllowedPath, validateIpc, IpcValidationError } from "../src/main/ipc-validation.js";
 
 // ── isAllowedPath unit tests ────────────────────────────────────────────
@@ -171,5 +177,99 @@ describe("validateIpc stream:subscribe path validation", () => {
   it("rejects stream:subscribe with URL-encoded traversal", () => {
     const args = [{ ...validArgs()[0], path: "/api/%2e%2e/admin" }];
     expect(() => validateIpc("stream:subscribe", args)).toThrow(IpcValidationError);
+  });
+});
+
+// ── Integration: infra:executeAction validation ──────────────────────────
+
+describe("validateIpc infra:executeAction", () => {
+  // ── edit-issue is accepted ──────────────────────────────────────
+
+  it("accepts edit-issue action with valid params", () => {
+    const args = [{ action: "edit-issue", params: { issueNumber: 42, title: "Fix bug" } }];
+    expect(() => validateIpc("infra:executeAction", args)).not.toThrow();
+  });
+
+  it("rejects edit-issue without issueNumber", () => {
+    const args = [{ action: "edit-issue", params: { title: "Fix bug" } }];
+    expect(() => validateIpc("infra:executeAction", args)).toThrow(IpcValidationError);
+  });
+
+  it("rejects edit-issue with non-number issueNumber", () => {
+    const args = [{ action: "edit-issue", params: { issueNumber: "42" } }];
+    expect(() => validateIpc("infra:executeAction", args)).toThrow(IpcValidationError);
+  });
+
+  // ── create-issue param validation ───────────────────────────────
+
+  it("accepts create-issue with valid title", () => {
+    const args = [{ action: "create-issue", params: { title: "Bug report" } }];
+    expect(() => validateIpc("infra:executeAction", args)).not.toThrow();
+  });
+
+  it("rejects create-issue without title", () => {
+    const args = [{ action: "create-issue", params: {} }];
+    expect(() => validateIpc("infra:executeAction", args)).toThrow(IpcValidationError);
+  });
+
+  it("rejects create-issue with empty string title", () => {
+    const args = [{ action: "create-issue", params: { title: "" } }];
+    expect(() => validateIpc("infra:executeAction", args)).toThrow(IpcValidationError);
+  });
+
+  it("rejects create-issue with non-string title", () => {
+    const args = [{ action: "create-issue", params: { title: 123 } }];
+    expect(() => validateIpc("infra:executeAction", args)).toThrow(IpcValidationError);
+  });
+
+  // ── add-label param validation ─────────────────────────────────
+
+  it("accepts add-label with valid issueNumber and labels", () => {
+    const args = [{ action: "add-label", params: { issueNumber: 7, labels: ["bug"] } }];
+    expect(() => validateIpc("infra:executeAction", args)).not.toThrow();
+  });
+
+  it("rejects add-label without issueNumber", () => {
+    const args = [{ action: "add-label", params: { labels: ["bug"] } }];
+    expect(() => validateIpc("infra:executeAction", args)).toThrow(IpcValidationError);
+  });
+
+  it("rejects add-label with non-number issueNumber", () => {
+    const args = [{ action: "add-label", params: { issueNumber: "7", labels: ["bug"] } }];
+    expect(() => validateIpc("infra:executeAction", args)).toThrow(IpcValidationError);
+  });
+
+  it("rejects add-label without labels array", () => {
+    const args = [{ action: "add-label", params: { issueNumber: 7 } }];
+    expect(() => validateIpc("infra:executeAction", args)).toThrow(IpcValidationError);
+  });
+
+  it("rejects add-label with non-array labels", () => {
+    const args = [{ action: "add-label", params: { issueNumber: 7, labels: "bug" } }];
+    expect(() => validateIpc("infra:executeAction", args)).toThrow(IpcValidationError);
+  });
+
+  it("rejects add-label with non-string label entries", () => {
+    const args = [{ action: "add-label", params: { issueNumber: 7, labels: [123] } }];
+    expect(() => validateIpc("infra:executeAction", args)).toThrow(IpcValidationError);
+  });
+
+  // ── unknown action is rejected ─────────────────────────────────
+
+  it("rejects unknown action", () => {
+    const args = [{ action: "delete-everything" }];
+    expect(() => validateIpc("infra:executeAction", args)).toThrow(IpcValidationError);
+  });
+
+  // ── clone-repo still works ──────────────────────────────────────
+
+  it("accepts clone-repo with valid repoUrl", () => {
+    const args = [{ action: "clone-repo", params: { repoUrl: "https://github.com/org/repo" } }];
+    expect(() => validateIpc("infra:executeAction", args)).not.toThrow();
+  });
+
+  it("rejects clone-repo without repoUrl", () => {
+    const args = [{ action: "clone-repo", params: {} }];
+    expect(() => validateIpc("infra:executeAction", args)).toThrow(IpcValidationError);
   });
 });
