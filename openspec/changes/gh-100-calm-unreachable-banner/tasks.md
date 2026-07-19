@@ -1,0 +1,6 @@
+- [ ] 1.1 Add i18n keys for unreachable banner text and composer disabled placeholder <!-- agent: frontend-engineer.fast, depends_on: [], touches: [src/renderer/src/i18n/en.json] -->
+- [ ] 1.2 Add `.unreachable-banner` CSS styles in theme.css <!-- agent: frontend-engineer.fast, depends_on: [], touches: [src/renderer/src/theme.css] -->
+- [ ] 2.1 Add reachability prop to SessionChatView and render UnreachableBanner <!-- agent: frontend-engineer.build, depends_on: [1.1, 1.2], touches: [src/renderer/src/components/SessionChatView.tsx] -->
+- [ ] 2.2 Add isReachable prop to ChatComposer and disable input when unreachable <!-- agent: frontend-engineer.build, depends_on: [1.1], touches: [src/renderer/src/chat/ChatComposer.tsx] -->
+- [ ] 3.1 Wire reachability through App.tsx to SessionChatView <!-- agent: frontend-engineer.build, depends_on: [2.1, 2.2], touches: [src/renderer/src/App.tsx] -->
+- [ ] 4.1 Run typecheck and fix errors <!-- agent: frontend-engineer.fast, depends_on: [3.1], touches: [] -->
