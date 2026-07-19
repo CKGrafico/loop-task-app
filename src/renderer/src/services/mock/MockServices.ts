@@ -133,6 +133,7 @@ function loadMockEnvironments(): Environment[] {
       id: "mock-env",
       name: "Mock VM",
       agentRuntime: "opencode",
+      runtimeState: "available",
       endpoints: [{ id: "ep1", kind: "direct" as EndpointKind, url: "http://localhost:8845", lastError: null, failureCount: 0 }],
       activeEndpointId: "ep1",
     }];
@@ -239,10 +240,25 @@ export class MockConnectionService implements IConnectionService {
 
 @injectable()
 export class MockOpenCodeService implements IOpenCodeService {
-  async getStatus(): Promise<OpenCodeConnectionStatus> {
-    return { authState: "unknown", errorKind: null, errorMessage: null, serverVersion: null, connectedProviders: [], checkedAt: null };
+  async getStatus(environmentId: string): Promise<OpenCodeConnectionStatus> {
+    const envs = await new MockConfigService().getEnvironments();
+    const env = envs.find((e) => e.id === environmentId);
+    // Environments named "no-runtime" or "auth" simulate runtime issues
+    // so the runtime health chip can be tested in dev mode.
+    const name = env?.name.toLowerCase() ?? "";
+    if (name.includes("no-runtime")) {
+      return { authState: "unknown", errorKind: "unreachable", errorMessage: "Runtime not found", serverVersion: null, connectedProviders: [], checkedAt: Date.now() };
+    }
+    if (name.includes("auth-problem")) {
+      return { authState: "unauthenticated", errorKind: "unauthenticated", errorMessage: "Run `opencode auth login` on the VM to connect a provider", serverVersion: null, connectedProviders: [], checkedAt: Date.now() };
+    }
+    if (name.includes("rejected")) {
+      return { authState: "unknown", errorKind: "rejected", errorMessage: "Wrong password for OpenCode server", serverVersion: null, connectedProviders: [], checkedAt: Date.now() };
+    }
+    // Default: authenticated
+    return { authState: "authenticated", errorKind: null, errorMessage: null, serverVersion: "1.2.0", connectedProviders: ["openai"], checkedAt: Date.now() };
   }
-  async refreshStatus(): Promise<OpenCodeConnectionStatus> { return this.getStatus(); }
+  async refreshStatus(environmentId: string): Promise<OpenCodeConnectionStatus> { return this.getStatus(environmentId); }
   onStatusChange(): () => void { return () => {}; }
 }
 
@@ -260,6 +276,7 @@ export class MockVmWizardService implements IVmWizardService {
       id: environmentId,
       name: environmentName,
       agentRuntime: options.agentRuntime,
+      runtimeState: "available",
       endpoints: [{
         id: "ep1",
         kind: endpointKind,
