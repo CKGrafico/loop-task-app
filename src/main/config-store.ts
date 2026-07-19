@@ -981,15 +981,15 @@ export async function addChatSession(session: Omit<ChatSession, "id" | "createdA
   });
 }
 
-export function removeChatSession(sessionId: string): void {
-  void serialize(() => {
+export function removeChatSession(sessionId: string): Promise<void> {
+  return serialize(() => {
     const sessions = store.get("chatSessions", []);
     store.set("chatSessions", sessions.filter((s) => s.id !== sessionId));
   });
 }
 
-export function updateChatSession(sessionId: string, updates: Partial<Pick<ChatSession, "title" | "lastActiveAt" | "environmentId" | "workingDirectory" | "activeRuntime">>): void {
-  void serialize(() => {
+export function updateChatSession(sessionId: string, updates: Partial<Pick<ChatSession, "title" | "lastActiveAt" | "environmentId" | "workingDirectory" | "activeRuntime">>): Promise<void> {
+  return serialize(() => {
     const sessions = store.get("chatSessions", []);
     const idx = sessions.findIndex((s) => s.id === sessionId);
     if (idx >= 0) {
