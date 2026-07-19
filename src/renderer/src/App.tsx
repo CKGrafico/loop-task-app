@@ -900,14 +900,18 @@ export function App(): React.ReactNode {
         );
       case "session": {
         const session = sessions.find((s) => s.id === view.sessionId);
+        const sessionEnvId = session?.environmentId ?? selected?.id ?? "";
+        const sessionEnv = environments.find((e) => e.id === sessionEnvId);
         return (
           <SessionChatView
             sessionId={view.sessionId}
-            environmentId={session?.environmentId ?? selected?.id ?? ""}
+            environmentId={sessionEnvId}
+            environmentName={sessionEnv?.name ?? sessionEnvId}
             activeRuntime={session?.activeRuntime ?? "opencode"}
             model={session?.activeModel}
             reasoningEffort={session?.reasoningEffort}
             environments={environments.map((e) => ({ id: e.id, name: e.name }))}
+            reachability={reachability[sessionEnvId]}
           />
         );
       }

@@ -2,10 +2,11 @@ import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from 
 import { useIntl } from "react-intl";
 import { cid, useInject } from "inversify-hooks";
 import type { ChatTurn, AccessMode, ApprovalDecision, ToolCall } from "../chat/types";
-import type { AgentStreamEvent, ReasoningEffort } from "../../../shared/ipc";
+import type { AgentStreamEvent, ReasoningEffort, ReachabilityState } from "../../../shared/ipc";
 import type { IAgentService, ITranscriptService } from "../services/interfaces";
 import { useTranscript } from "../chat/useTranscript";
 import { ChatComposer } from "../chat/ChatComposer";
+import { WifiOff } from "lucide-react";
 
 const MarkdownContent = lazy(() =>
   import("../chat/MarkdownContent").then((m) => ({ default: m.MarkdownContent })),
@@ -17,13 +18,15 @@ import { TurnFold } from "../chat/TurnFold";
 interface SessionChatViewProps {
   sessionId: string;
   environmentId: string;
+  environmentName: string;
   activeRuntime: string;
   model?: string;
   reasoningEffort?: ReasoningEffort;
   environments: Array<{ id: string; name: string }>;
+  reachability?: ReachabilityState;
 }
 
-export function SessionChatView({ sessionId, environmentId, activeRuntime, model, reasoningEffort, environments }: SessionChatViewProps): React.ReactNode {
+export function SessionChatView({ sessionId, environmentId, environmentName, activeRuntime, model, reasoningEffort, environments, reachability }: SessionChatViewProps): React.ReactNode {
   const intl = useIntl();
   const [agentService] = useInject<IAgentService>(cid.IAgentService);
   const [transcriptService] = useInject<ITranscriptService>(cid.ITranscriptService);
@@ -46,6 +49,9 @@ export function SessionChatView({ sessionId, environmentId, activeRuntime, model
   const [opencodeSessionId, setOpenCodeSessionId] = useState<string | undefined>(undefined);
   const scrollRef = useRef<HTMLDivElement>(null);
   const initialEnvRef = useRef<string | null>(null);
+
+  // ── Reachability ──────────────────────────────────────────────────────
+  const isReachable = reachability === "connected" || reachability === undefined;
 
   // ── Clear active turn and reload transcript on instance switch ───
   // When the environmentId changes (instance switch), any in-flight
@@ -259,6 +265,15 @@ export function SessionChatView({ sessionId, environmentId, activeRuntime, model
 
   return (
     <div className="session-chat-panel">
+      {!isReachable ? (
+        <div className="unreachable-banner">
+          <WifiOff size={13} />
+          {intl.formatMessage(
+            { id: reachability === "reconnecting" ? "unreachableBanner.reconnecting" : "unreachableBanner.unreachable" },
+            { instance: environmentName },
+          )}
+        </div>
+      ) : null}
       <div className="session-chat-scroll" ref={scrollRef}>
         {rows.length === 0 ? (
           <div className="session-chat-empty">
@@ -360,6 +375,7 @@ export function SessionChatView({ sessionId, environmentId, activeRuntime, model
         onAccessModeChange={handleAccessModeChange}
         drafts={drafts}
         onDraftChange={handleDraftChange}
+        isReachable={isReachable}
       />
     </div>
   );

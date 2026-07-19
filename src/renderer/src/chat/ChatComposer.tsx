@@ -16,6 +16,7 @@ interface ChatComposerProps {
   onAccessModeChange: (mode: AccessMode) => void;
   drafts: Record<string, string>;
   onDraftChange: (turnId: string | null, text: string) => void;
+  isReachable?: boolean;
 }
 
 export function ChatComposer({
@@ -29,6 +30,7 @@ export function ChatComposer({
   onAccessModeChange,
   drafts,
   onDraftChange,
+  isReachable = true,
 }: ChatComposerProps) {
   const intl = useIntl();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -53,10 +55,10 @@ export function ChatComposer({
   }, [draftKey, drafts]);
 
   useEffect(() => {
-    if (textareaRef.current && !isRunning && !pendingApproval && !pendingQuestion) {
+    if (textareaRef.current && !isRunning && !pendingApproval && !pendingQuestion && isReachable) {
       textareaRef.current.focus();
     }
-  }, [isRunning, pendingApproval, pendingQuestion]);
+  }, [isRunning, pendingApproval, pendingQuestion, isReachable]);
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -132,11 +134,13 @@ export function ChatComposer({
           <textarea
             ref={textareaRef}
             className="composer-textarea"
-            placeholder={intl.formatMessage({ id: "chat.sendPlaceholder" })}
+            placeholder={isReachable
+              ? intl.formatMessage({ id: "chat.sendPlaceholder" })
+              : intl.formatMessage({ id: "chat.sendPlaceholderUnreachable" })}
             value={currentDraft}
             onChange={handleTextChange}
             onKeyDown={handleKeyDown}
-            disabled={!!isRunning}
+            disabled={!!isRunning || !isReachable}
             rows={1}
           />
           {isRunning ? (
@@ -152,7 +156,7 @@ export function ChatComposer({
               className="composer-send-btn"
               title={intl.formatMessage({ id: "chat.sendPrompt" })}
               onClick={handleSend}
-              disabled={!currentDraft.trim()}
+              disabled={!currentDraft.trim() || !isReachable}
             >
               <ArrowUp size={14} />
             </button>

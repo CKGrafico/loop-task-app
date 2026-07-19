@@ -457,6 +457,7 @@
     "supervisedTitle": "Agent asks before commands and file changes",
     "fullAccessTitle": "Agent runs without prompts",
     "sendPlaceholder": "Send a prompt…",
+    "sendPlaceholderUnreachable": "Instance unreachable — prompts will queue",
     "stopTurn": "Stop current turn",
     "sendPrompt": "Send prompt (Enter)",
     "approvalRequired": "Approval required",
@@ -722,5 +723,9 @@
   },
   "instanceAttribution": {
     "label": "on {instance}"
+  },
+  "unreachableBanner": {
+    "unreachable": "{instance} unreachable — reconnecting…",
+    "reconnecting": "{instance} reconnecting…"
   }
 }
