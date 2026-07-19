@@ -134,12 +134,46 @@ const MOCK_CHAT_SESSIONS: ChatSession[] = [
   { id: "session-5", title: "Claude auto-fixes", projectName: "Agents", environmentId: "mock-env-1", workingDirectory: "/home/user/agents", activeRuntime: "claude", activeModel: "anthropic/claude-3.5-haiku", lastActiveAt: iso(-43200000), createdAt: iso(-86400000 * 5) },
 ];
 
-function mockRequest<T>(path: string): Promise<ApiResponse<T>> {
+function mockRequest<T>(path: string, method: string = "GET"): Promise<ApiResponse<T>> {
+  // ── Loop action mutations (POST) ─────────────────────────────
+  if (method === "POST") {
+    const loopActionMatch = path.match(/^\/api\/loops\/([^/]+)\/(pause|resume|stop|trigger)$/);
+    if (loopActionMatch) {
+      const loopId = loopActionMatch[1];
+      const action = loopActionMatch[2];
+      const loop = MOCK_LOOPS.find((l) => l.id === loopId);
+      if (loop) {
+        switch (action) {
+          case "pause":
+            loop.status = "paused";
+            break;
+          case "resume":
+            loop.status = "waiting";
+            loop.nextRunAt = new Date(Date.now() + 300000).toISOString();
+            break;
+          case "stop":
+            loop.status = "stopped";
+            loop.nextRunAt = null;
+            break;
+          case "trigger":
+            loop.status = "running";
+            break;
+        }
+      }
+      return Promise.resolve({ ok: true, status: 200, data: undefined as T });
+    }
+  }
+
+  // ── Read operations (GET) ────────────────────────────────────
   let data: unknown = null;
-  if (path.includes("/api/loops")) data = MOCK_LOOPS;
+  if (path.includes("/api/loops/") && path.includes("/logs")) data = "=== Run #142\nBuilding project...\nnpm run build\nexit 0\n=== Run #141\nBuilding project...\nnpm run build\nexit 0\n=== Run #140\nBuilding project...\nnpm run build\nexit 1";
+  else if (path.match(/^\/api\/loops\/[^/]+$/)) {
+    const loopId = path.replace(/^\/api\/loops\//, "");
+    data = MOCK_LOOPS.find((l) => l.id === loopId) ?? null;
+  }
+  else if (path === "/api/loops") data = MOCK_LOOPS;
   else if (path.includes("/api/projects")) data = MOCK_PROJECTS;
   else if (path.includes("/api/tasks")) data = MOCK_TASKS;
-  else if (path.includes("/api/loops/") && path.includes("/logs")) data = "=== Run #142\nBuilding project...\nnpm run build\nexit 0\n=== Run #141\nBuilding project...\nnpm run build\nexit 0\n=== Run #140\nBuilding project...\nnpm run build\nexit 1";
   else if (path.includes("/api/settings")) data = { httpApiEnabled: true, mcpApiEnabled: false, httpApiHost: "0.0.0.0" };
   return Promise.resolve({ ok: true, status: 200, data: data as T });
 }
@@ -555,7 +589,7 @@ export class MockInfraService implements IInfraService {
 @injectable()
 export class MockApiService implements IApiService {
   async request<T>(args: ApiRequestArgs): Promise<ApiResponse<T>> {
-    return mockRequest<T>(args.path);
+    return mockRequest<T>(args.path, args.method);
   }
 }
 

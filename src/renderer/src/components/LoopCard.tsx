@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useIntl } from "react-intl";
 import type { Environment, LoopMeta, LoopStatus } from "../types";
 import { STATUS_COLORS, commandLine, timeUntil } from "../format";
-import { fetchLogs, subscribeLogs } from "../api";
+import { fetchLogs, pauseLoop, resumeLoop, stopLoop, subscribeLogs, triggerLoop } from "../api";
 import { classifyLogLine } from "./log-types";
 import { useNextRunCountdown } from "./useNextRunCountdown";
 import type { StreamState } from "./useLiveLog";
@@ -12,7 +12,7 @@ interface LoopCardProps {
   loop: LoopMeta;
   /** Whether the instance hosting this loop is reachable. */
   reachability?: "connected" | "reconnecting" | "unreachable";
-  /** The environment-instance that hosts this loop. When provided, the card shows a log tail. */
+  /** The environment-instance that hosts this loop. When provided, the card shows a log tail and action buttons. */
   instance?: Environment;
 }
 
@@ -24,6 +24,101 @@ const LOG_TAIL_SIZE = 10;
 
 /** Maximum in-memory lines for the compact card log view. */
 const MAX_LOG_LINES = 50;
+
+/** How long the action result message stays visible (ms). */
+const RESULT_DISPLAY_MS = 2000;
+
+/** How long an error message stays visible (ms). */
+const ERROR_DISPLAY_MS = 4000;
+
+/** Loop action type for internal state tracking. */
+type LoopAction = "pause" | "resume" | "stop" | "trigger";
+
+/** Result of executing a loop action. */
+type ActionResult =
+  | { kind: "success"; action: LoopAction }
+  | { kind: "error"; message: string };
+
+/**
+ * Determine which actions are available for a given loop status.
+ * Rules per the spec:
+ *   running  → Pause, Stop
+ *   waiting  → Pause, Stop, Run Now
+ *   paused   → Resume, Stop, Run Now
+ *   stopped  → Run Now
+ *   failed   → Stop, Run Now
+ *   finished → (none)
+ */
+function getAvailableActions(status: LoopStatus): LoopAction[] {
+  switch (status) {
+    case "running":
+      return ["pause", "stop"];
+    case "waiting":
+      return ["pause", "stop", "trigger"];
+    case "paused":
+      return ["resume", "stop", "trigger"];
+    case "stopped":
+      return ["trigger"];
+    case "failed":
+      return ["stop", "trigger"];
+    case "finished":
+      return [];
+  }
+}
+
+/**
+ * Determine which actions need confirmation before executing.
+ * Stop always needs confirmation (clears schedule).
+ * Pause of a running loop needs confirmation (interrupts active work).
+ * Run Now on a stopped loop needs confirmation (re-schedules).
+ * Resume and Run Now on a waiting loop execute immediately.
+ */
+function needsConfirmation(action: LoopAction, status: LoopStatus): boolean {
+  if (action === "stop") return true;
+  if (action === "pause" && status === "running") return true;
+  if (action === "trigger" && status === "stopped") return true;
+  return false;
+}
+
+/** Result label for a successful action. */
+function actionResultLabel(action: LoopAction): string {
+  switch (action) {
+    case "pause": return "loopCard.resultPaused";
+    case "resume": return "loopCard.resultResumed";
+    case "stop": return "loopCard.resultStopped";
+    case "trigger": return "loopCard.resultTriggered";
+  }
+}
+
+/** Button label for an action. */
+function actionButtonLabel(action: LoopAction): string {
+  switch (action) {
+    case "pause": return "loopCard.actionPause";
+    case "resume": return "loopCard.actionResume";
+    case "stop": return "loopCard.actionStop";
+    case "trigger": return "loopCard.actionRunNow";
+  }
+}
+
+/** Confirmation title i18n key for an action that needs confirmation. */
+function confirmTitleKey(action: LoopAction): string {
+  switch (action) {
+    case "pause": return "loopCard.confirmPauseTitle";
+    case "stop": return "loopCard.confirmStopTitle";
+    case "trigger": return "loopCard.confirmRunNowTitle";
+    default: return "loopCard.confirmRunNowTitle";
+  }
+}
+
+/** Confirmation description i18n key for an action that needs confirmation. */
+function confirmDescriptionKey(action: LoopAction): string {
+  switch (action) {
+    case "pause": return "loopCard.confirmPauseDescription";
+    case "stop": return "loopCard.confirmStopDescription";
+    case "trigger": return "loopCard.confirmRunNowDescription";
+    default: return "loopCard.confirmRunNowDescription";
+  }
+}
 
 export function LoopCard({ loop, reachability, instance }: LoopCardProps): React.ReactNode {
   const intl = useIntl();
@@ -56,6 +151,84 @@ export function LoopCard({ loop, reachability, instance }: LoopCardProps): React
   const dotColor = isReachable
     ? (STATUS_COLORS[loop.status] ?? "var(--text-secondary)")
     : "var(--status-unknown)";
+
+  // ── Action state ─────────────────────────────────────────────────────
+  const [confirmingAction, setConfirmingAction] = useState<LoopAction | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionResult, setActionResult] = useState<ActionResult | null>(null);
+  const resultTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear result timer on unmount
+  useEffect(() => {
+    return () => {
+      if (resultTimerRef.current) clearTimeout(resultTimerRef.current);
+    };
+  }, []);
+
+  const executeAction = useCallback(async (action: LoopAction): Promise<void> => {
+    if (!instance) return;
+    setActionLoading(true);
+    setConfirmingAction(null);
+
+    try {
+      let res: { ok: boolean; error?: unknown };
+      switch (action) {
+        case "pause":
+          res = await pauseLoop(instance, loop.id);
+          break;
+        case "resume":
+          res = await resumeLoop(instance, loop.id);
+          break;
+        case "stop":
+          res = await stopLoop(instance, loop.id);
+          break;
+        case "trigger":
+          res = await triggerLoop(instance, loop.id);
+          break;
+      }
+
+      if (res.ok) {
+        setActionResult({ kind: "success", action });
+      } else {
+        const errorMsg = typeof res.error === "string"
+          ? res.error
+          : intl.formatMessage({ id: "loopCard.resultError" });
+        setActionResult({ kind: "error", message: errorMsg });
+      }
+    } catch {
+      setActionResult({ kind: "error", message: intl.formatMessage({ id: "loopCard.resultError" }) });
+    } finally {
+      setActionLoading(false);
+    }
+
+    // Auto-clear result after timeout
+    const duration = actionResult?.kind === "error" ? ERROR_DISPLAY_MS : RESULT_DISPLAY_MS;
+    if (resultTimerRef.current) clearTimeout(resultTimerRef.current);
+    resultTimerRef.current = setTimeout(() => {
+      setActionResult(null);
+    }, duration);
+  }, [instance, loop.id, intl, actionResult?.kind]);
+
+  const handleActionClick = useCallback((action: LoopAction): void => {
+    if (needsConfirmation(action, loop.status)) {
+      setConfirmingAction(action);
+    } else {
+      void executeAction(action);
+    }
+  }, [executeAction, loop.status]);
+
+  const handleConfirmCancel = useCallback((): void => {
+    setConfirmingAction(null);
+  }, []);
+
+  const handleConfirmExecute = useCallback((): void => {
+    if (confirmingAction) {
+      void executeAction(confirmingAction);
+    }
+  }, [confirmingAction, executeAction]);
+
+  // Available actions for this loop
+  const availableActions = isReachable && instance ? getAvailableActions(loop.status) : [];
 
   // ── Live log streaming ─────────────────────────────────────────────────
   const [logLines, setLogLines] = useState<string[]>([]);
@@ -201,6 +374,9 @@ export function LoopCard({ loop, reachability, instance }: LoopCardProps): React
   // Whether to render the log tail section
   const showLogTail = instance && isReachable && logLines.length > 0;
 
+  // Whether to show action buttons
+  const showActions = availableActions.length > 0;
+
   return (
     <div className={cardCls} ref={cardRef}>
       {/* Header row: status dot + name */}
@@ -279,6 +455,60 @@ export function LoopCard({ loop, reachability, instance }: LoopCardProps): React
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Action result feedback */}
+      {actionResult && (
+        <div className={`loop-card-action-result${actionResult.kind === "error" ? " loop-card-action-result--error" : ""}`}>
+          {actionResult.kind === "success"
+            ? intl.formatMessage({ id: actionResultLabel(actionResult.action) })
+            : actionResult.message}
+        </div>
+      )}
+
+      {/* Action buttons */}
+      {showActions && !actionResult && (
+        <div className="loop-card-actions">
+          {availableActions.map((action) => (
+            <button
+              key={action}
+              className={`loop-card-action-btn loop-card-action-btn--${action}`}
+              disabled={actionLoading}
+              onClick={() => handleActionClick(action)}
+            >
+              {intl.formatMessage({ id: actionButtonLabel(action) })}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Confirmation overlay */}
+      {confirmingAction && (
+        <div className="loop-card-confirm-overlay">
+          <div className="loop-card-confirm-content">
+            <div className="loop-card-confirm-title">
+              {intl.formatMessage({ id: confirmTitleKey(confirmingAction) })}
+            </div>
+            <div className="loop-card-confirm-description">
+              {intl.formatMessage({ id: confirmDescriptionKey(confirmingAction) })}
+            </div>
+            <div className="loop-card-confirm-buttons">
+              <button
+                className="loop-card-confirm-btn loop-card-confirm-btn--cancel"
+                onClick={handleConfirmCancel}
+              >
+                {intl.formatMessage({ id: "loopCard.confirmCancel" })}
+              </button>
+              <button
+                className="loop-card-confirm-btn loop-card-confirm-btn--confirm"
+                onClick={handleConfirmExecute}
+                disabled={actionLoading}
+              >
+                {intl.formatMessage({ id: actionButtonLabel(confirmingAction) })}
+              </button>
+            </div>
           </div>
         </div>
       )}

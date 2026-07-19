@@ -759,6 +759,22 @@
     "copied": "Copied",
     "logUnavailable": "unavailable",
     "live": "LIVE",
-    "disconnected": "disconnected"
+    "disconnected": "disconnected",
+    "actionPause": "Pause",
+    "actionResume": "Resume",
+    "actionStop": "Stop",
+    "actionRunNow": "Run now",
+    "confirmPauseTitle": "Pause this loop?",
+    "confirmPauseDescription": "The schedule will be kept. You can resume at any time.",
+    "confirmStopTitle": "Stop this loop?",
+    "confirmStopDescription": "The schedule will be cleared. You will need to re-create the loop to run it again.",
+    "confirmRunNowTitle": "Trigger a run now?",
+    "confirmRunNowDescription": "This will start an immediate run of the loop.",
+    "confirmCancel": "Cancel",
+    "resultPaused": "Paused",
+    "resultResumed": "Resumed",
+    "resultStopped": "Stopped",
+    "resultTriggered": "Triggered",
+    "resultError": "Action failed"
   }
 }
