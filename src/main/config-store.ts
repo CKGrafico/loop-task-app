@@ -46,7 +46,6 @@ interface ConfigSchema {
   projectPickupLabels: Record<string, string[]>;
   chatSessions: ChatSession[];
   expandedProjects: string[];
-  [key: string]: unknown;
 }
 
 const store = new Store<ConfigSchema>({

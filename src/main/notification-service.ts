@@ -6,7 +6,6 @@ import Store from "electron-store";
 interface NotificationConfigSchema {
   notificationsMuted: boolean;
   pendingDeepLink: DeepLinkTarget | null;
-  [key: string]: unknown;
 }
 
 const store = new Store<NotificationConfigSchema>({
