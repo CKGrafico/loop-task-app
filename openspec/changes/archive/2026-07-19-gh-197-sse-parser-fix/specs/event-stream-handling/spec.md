@@ -1,9 +1,5 @@
-# event-stream-handling Specification
+## MODIFIED Requirements
 
-## Purpose
-Defines how SSE (Server-Sent Events) streams from loop-task daemons are parsed in the main process and dispatched to the renderer via the `stream:event` IPC channel.
-
-## Requirements
 ### Requirement: Event stream kind is handled in stream subscriber
 The stream handler in the main process SHALL use a spec-compliant SSE parser to process incoming `text/event-stream` responses. When an SSE event is parsed, the handler SHALL dispatch `StreamEventPayload` messages to the renderer with the correct `kind` and `text`. Multi-line `data:` fields SHALL be concatenated with `\n` before dispatch as a single `data` kind message. The `event:` field SHALL be dispatched as a separate `event` kind message. Lines starting with `id:`, `retry:`, or `:` SHALL be processed by the parser but SHALL NOT trigger any dispatch to the renderer.
 
@@ -14,14 +10,6 @@ The stream handler in the main process SHALL use a spec-compliant SSE parser to 
 #### Scenario: Malformed event falls back to plain text
 - **WHEN** a `StreamEventPayload` with `kind: "event"` is received and `text` is not valid JSON
 - **THEN** the text is treated as a plain-text log line
-
-#### Scenario: Event with tool call structure creates tool-call row
-- **WHEN** a parsed event contains a `tool` or `type: "tool_call"` field
-- **THEN** a `tool-call` LogRow is created with the tool kind, title, status, and output
-
-#### Scenario: Event with markdown content creates markdown row
-- **WHEN** a parsed event contains a `content` field with markdown text
-- **THEN** a `markdown` LogRow is created
 
 #### Scenario: Multi-line data fields are concatenated
 - **WHEN** the SSE stream delivers an event with multiple `data:` lines
@@ -34,15 +22,3 @@ The stream handler in the main process SHALL use a spec-compliant SSE parser to 
 #### Scenario: id and retry fields do not pollute data
 - **WHEN** the SSE stream delivers `id:` or `retry:` lines
 - **THEN** no `StreamEventPayload` is dispatched for those lines, and subsequent data events are not corrupted
-
-### Requirement: Subscribe logs callback accepts structured events
-The `subscribeLogs` function signature SHALL support an optional `onEvent` callback that receives parsed structured events. The existing `onLine` callback SHALL continue to receive plain text lines for backward compatibility. When no `onEvent` callback is provided, structured events SHALL be converted to plain text lines via JSON.stringify.
-
-#### Scenario: onEvent callback receives structured data
-- **WHEN** `subscribeLogs` is called with an `onEvent` callback
-- **THEN** structured events are passed to `onEvent` as parsed objects
-
-#### Scenario: Missing onEvent callback falls back to text
-- **WHEN** `subscribeLogs` is called without an `onEvent` callback and a structured event arrives
-- **THEN** the event text is passed to `onLine` as a raw string
-
