@@ -61,6 +61,24 @@ export function fetchSettings(env: Environment): Promise<ApiResponse<DaemonSetti
   return apiRequest<DaemonSettings>(env, "/api/settings");
 }
 
+// ── Loop mutations ──
+
+export function pauseLoop(env: Environment, loopId: string): Promise<ApiResponse> {
+  return apiRequest(env, `/api/loops/${encodeURIComponent(loopId)}/pause`, "POST");
+}
+
+export function resumeLoop(env: Environment, loopId: string): Promise<ApiResponse> {
+  return apiRequest(env, `/api/loops/${encodeURIComponent(loopId)}/resume`, "POST");
+}
+
+export function stopLoop(env: Environment, loopId: string): Promise<ApiResponse> {
+  return apiRequest(env, `/api/loops/${encodeURIComponent(loopId)}/stop`, "POST");
+}
+
+export function triggerLoop(env: Environment, loopId: string): Promise<ApiResponse> {
+  return apiRequest(env, `/api/loops/${encodeURIComponent(loopId)}/trigger`, "POST");
+}
+
 // ── SSE log streaming (standalone) ──
 
 const streamHandlers = new Map<string, LogStreamHandlers>();

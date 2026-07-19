@@ -54,6 +54,10 @@ describe("isAllowedApiOperation — positive tests", () => {
   it("allows POST /api/repos/clone", () => {
     expect(isAllowedApiOperation("POST", "/api/repos/clone")).toBe(true);
   });
+
+  it("allows POST /api/loops/{id}/stop", () => {
+    expect(isAllowedApiOperation("POST", "/api/loops/abc-123/stop")).toBe(true);
+  });
 });
 
 // ── Negative tests: arbitrary/unsupported operations must be rejected ──
@@ -198,9 +202,9 @@ describe("findAllowedOperation", () => {
 // ── Allowlist completeness (guard rail) ───────────────────────────────
 
 describe("allowlist completeness guard", () => {
-  it("API operations list has exactly 10 entries", () => {
+  it("API operations list has exactly 11 entries", () => {
     // If this breaks, update the test count — but verify the change is intentional.
-    expect(ALLOWED_API_OPERATIONS).toHaveLength(10);
+    expect(ALLOWED_API_OPERATIONS).toHaveLength(11);
   });
 
   it("Stream paths list has exactly 1 entry", () => {

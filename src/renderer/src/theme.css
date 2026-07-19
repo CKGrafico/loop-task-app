@@ -1450,6 +1450,174 @@ input {
   50% { opacity: 0.4; }
 }
 
+/* ── Loop card action buttons ────────────────────────────────────────── */
+
+.loop-card-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.loop-card-action-btn {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 3px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: var(--font-ui);
+  white-space: nowrap;
+}
+
+.loop-card-action-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border-color: var(--text-muted);
+}
+
+.loop-card-action-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.loop-card-action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.loop-card-action-btn--pause:hover:not(:disabled) {
+  border-color: var(--status-paused, #f59e0b);
+  color: var(--status-paused, #f59e0b);
+}
+
+.loop-card-action-btn--resume:hover:not(:disabled) {
+  border-color: var(--status-running, #34d399);
+  color: var(--status-running, #34d399);
+}
+
+.loop-card-action-btn--stop:hover:not(:disabled) {
+  border-color: var(--danger, #ef4444);
+  color: var(--danger, #ef4444);
+}
+
+.loop-card-action-btn--trigger:hover:not(:disabled) {
+  border-color: var(--accent, #60a5fa);
+  color: var(--accent, #60a5fa);
+}
+
+/* ── Loop card action result feedback ────────────────────────────────── */
+
+.loop-card-action-result {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--status-running, #34d399);
+  text-align: center;
+  padding: 5px 0;
+  margin-top: 2px;
+  border-top: 1px solid var(--border-subtle);
+  animation: loop-card-result-fade-in 0.2s ease;
+}
+
+.loop-card-action-result--error {
+  color: var(--danger, #ef4444);
+}
+
+@keyframes loop-card-result-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Loop card confirmation overlay ──────────────────────────────────── */
+
+.loop-card {
+  position: relative;
+}
+
+.loop-card-confirm-overlay {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
+  backdrop-filter: blur(2px);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  animation: loop-card-confirm-fade-in 0.15s ease;
+}
+
+@keyframes loop-card-confirm-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.loop-card-confirm-content {
+  text-align: center;
+  padding: 12px 16px;
+  max-width: 85%;
+}
+
+.loop-card-confirm-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.loop-card-confirm-description {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+.loop-card-confirm-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.loop-card-confirm-btn {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 4px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  transition: all 0.15s ease;
+}
+
+.loop-card-confirm-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.loop-card-confirm-btn--cancel {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+}
+
+.loop-card-confirm-btn--cancel:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.loop-card-confirm-btn--confirm {
+  background: var(--bg-active);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.loop-card-confirm-btn--confirm:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
 /* ── Transcript loop-card row (padding inside the chat stream) ──── */
 
 .transcript-loop-card {

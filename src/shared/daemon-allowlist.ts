@@ -81,6 +81,11 @@ export const ALLOWED_API_OPERATIONS: readonly AllowedOperation[] = [
   },
   {
     method: "POST",
+    pathPattern: /^\/api\/loops\/[^/]+\/stop$/,
+    description: "Stop a loop (clears schedule)",
+  },
+  {
+    method: "POST",
     pathPattern: /^\/api\/repos\/clone$/,
     description: "Clone a repository",
   },
