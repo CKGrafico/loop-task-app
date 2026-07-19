@@ -29,6 +29,7 @@ import { translateMessage, standaloneIntl } from "./i18n";
 import { cid, useInject } from "inversify-hooks";
 import type { IConnectionService, IOpenCodeService, IOutageService, IInboxService, IReachabilityService, InboxBuildParams } from "./services/interfaces";
 import { InfraChatPanel } from "./components/InfraChatPanel";
+import { RuntimeHealthChip } from "./components/RuntimeHealthChip";
 
 type View =
   | { kind: "inbox" }
@@ -336,6 +337,30 @@ export function App(): React.ReactNode {
     void fetchOpenCode();
     return () => { cancelled = true; };
   }, [environments, connectionService, openCodeService]);
+
+  // Periodic OpenCode status refresh for runtime health chip (every 30s)
+  useEffect(() => {
+    if (isMock || !selected) return;
+    if (!selected.opencode) return;
+    const connStatus = connectionStatus[selected.id];
+    if (connStatus && connStatus.phase !== "connected") return;
+
+    let cancelled = false;
+    const refresh = async (): Promise<void> => {
+      const status = await openCodeService.refreshStatus(selected.id);
+      if (cancelled) return;
+      setOpenCodeStatus((prev) =>
+        prev[selected.id] === status ? prev : { ...prev, [selected.id]: status },
+      );
+    };
+
+    void refresh();
+    const timer = setInterval(() => void refresh(), 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [selected?.id, selected?.opencode, connectionStatus[selected?.id ?? ""]?.phase, openCodeService]);
 
   useEffect(() => {
     const report = (): void => {
@@ -726,6 +751,15 @@ export function App(): React.ReactNode {
             <span className={`chip ${daemonSettings.mcpApiEnabled ? "chip-ok" : "chip-off"}`} title={intl.formatMessage({ id: "app.daemonMcpApi" })}>MCP</span>
           </>
         ) : null}
+
+        {/* Runtime health chip */}
+        <RuntimeHealthChip
+          environment={selected}
+          health={health[selected.id] ?? "unknown"}
+          reachability={reachability[selected.id]}
+          openCodeStatus={openCodeStatus[selected.id]}
+          runtimeState={selected.runtimeState}
+        />
 
         {/* Spacer */}
         <span style={{ flex: 1 }} />

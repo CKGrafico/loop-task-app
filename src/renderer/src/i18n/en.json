@@ -583,5 +583,22 @@
     "headline": "Welcome to Orbion",
     "copy": "Orbion talks to loop-task daemons running on your machines. Adding one machine is the only setup you need — then you can start managing loops and tasks right away.",
     "addFirstMachine": "Add your first machine"
+  },
+  "runtimeHealth": {
+    "ok": "Runtime",
+    "notRunning": "Not running",
+    "notInstalled": "Not installed",
+    "authProblem": "Auth issue",
+    "unreachable": "Runtime",
+    "okReason": "Runtime is available and ready",
+    "notRunningReason": "Runtime server is not running",
+    "notInstalledReason": "Runtime is not installed on this instance",
+    "notInstalledLabelReason": "{label} is not installed on this instance",
+    "authProblemReason": "Runtime credentials are invalid or missing",
+    "rejectedReason": "Runtime authentication was rejected",
+    "unreachableReason": "Instance is unreachable",
+    "daemonDownReason": "Daemon is not connected",
+    "versionTooOldReason": "Runtime version is too old",
+    "unknownReason": "{label} status unknown"
   }
 }
