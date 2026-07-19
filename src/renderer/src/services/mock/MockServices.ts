@@ -35,6 +35,8 @@ import type {
   ReachabilityStatus,
   ChatSession,
   TranscriptMessage,
+  McpConnectionStatus,
+  McpToolCallResult,
 } from "../../../../shared/ipc";
 import { kindToNotificationType } from "../../../../shared/ipc";
 import type { LoopMeta, Project, TaskDefinition } from "../../types";
@@ -54,6 +56,7 @@ import type {
   IOutageService,
   IReachabilityService,
   ITranscriptService,
+  IMcpService,
 } from "../interfaces";
 
 const now = Date.now();
@@ -867,5 +870,69 @@ export class MockTranscriptService implements ITranscriptService {
 
   async deleteSession(sessionId: string): Promise<void> {
     localStorage.removeItem(this.getKey(sessionId));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Mock MCP Service (browser-only dev)
+// ---------------------------------------------------------------------------
+
+const MOCK_MCP_TOOLS = [
+  { name: "create_loop", description: "Create a new loop" },
+  { name: "list_loops", description: "List all loops" },
+  { name: "pause_loop", description: "Pause a running loop" },
+  { name: "resume_loop", description: "Resume a paused loop" },
+  { name: "stop_loop", description: "Stop a loop" },
+  { name: "trigger_loop", description: "Trigger an immediate loop run" },
+  { name: "list_tasks", description: "List all task definitions" },
+  { name: "list_projects", description: "List all projects" },
+];
+
+@injectable()
+export class MockMcpService implements IMcpService {
+  private listeners: ((status: McpConnectionStatus) => void)[] = [];
+
+  async getStatus(environmentId: string): Promise<McpConnectionStatus> {
+    const envs = await new MockConfigService().getEnvironments();
+    const env = envs.find((e) => e.id === environmentId);
+    // Environments named "no-mcp" simulate MCP unavailability
+    const isUnavailable = env?.name.toLowerCase().includes("no-mcp");
+    return {
+      environmentId,
+      state: isUnavailable ? "unreachable" : "connected",
+      tools: isUnavailable ? [] : MOCK_MCP_TOOLS,
+      lastError: isUnavailable ? "MCP server not available" : null,
+      connectedAt: isUnavailable ? null : Date.now(),
+    };
+  }
+
+  async connect(environmentId: string): Promise<McpConnectionStatus> {
+    return this.getStatus(environmentId);
+  }
+
+  async disconnect(): Promise<void> {
+    // Mock: no-op
+  }
+
+  async callTool(environmentId: string, toolName: string, _args: Record<string, unknown>): Promise<McpToolCallResult> {
+    const status = await this.getStatus(environmentId);
+    if (status.state !== "connected") {
+      return { ok: false, error: "MCP server not connected" };
+    }
+
+    const known = status.tools.some((t) => t.name === toolName);
+    if (!known) {
+      return { ok: false, error: `Unknown MCP tool: ${toolName}` };
+    }
+
+    // Mock: return a generic success response
+    return { ok: true, data: { message: `Mock result for ${toolName}` } };
+  }
+
+  onStatusChange(cb: (status: McpConnectionStatus) => void): () => void {
+    this.listeners.push(cb);
+    return () => {
+      this.listeners = this.listeners.filter((l) => l !== cb);
+    };
   }
 }

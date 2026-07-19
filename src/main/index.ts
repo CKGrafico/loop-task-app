@@ -32,6 +32,8 @@ import type {
   VmWizardStartOptions,
   ReachabilityStatus,
   TranscriptMessage,
+  McpConnectionStatus,
+  McpToolCallResult,
 } from "../shared/ipc.js";
 import type { Environment, SessionScope, NotificationSendArgs } from "../shared/ipc.js";
 import { trimTrailingSlash } from "../shared/utils.js";
@@ -115,6 +117,13 @@ import {
   closeAllRegistryTunnels,
   onTunnelReconnect,
 } from "./tunnel-registry.js";
+import {
+  getMcpStatus,
+  connectMcp,
+  disconnectMcp,
+  callMcpTool,
+  removeMcpSession,
+} from "./mcp-client.js";
 
 const streams = new Map<string, AbortController>();
 
@@ -528,6 +537,8 @@ async function seedSupervisors(): Promise<void> {
     if (env.opencode) {
       void refreshOpenCodeStatus(env.id, env.opencode);
     }
+    // Connect to the environment's MCP server (fire-and-forget)
+    void connectMcp(env.id);
   }
 }
 
@@ -680,6 +691,7 @@ app.whenReady().then(() => {
   safeHandle("config:removeEnvironment", async (_event, ...rawArgs) => {
     const [id] = validateIpc<[string]>("config:removeEnvironment", rawArgs);
     removeSupervisor(id);
+    removeMcpSession(id);
     await removeEnvironment(id);
   });
   safeHandle("config:addEndpoint", async (_event, ...rawArgs) => {
@@ -723,6 +735,8 @@ app.whenReady().then(() => {
           getOrCreateSupervisor(environmentId, tunnelUrl);
         }
       }
+      // Reconnect MCP to the new endpoint's MCP server (fire-and-forget)
+      void connectMcp(environmentId);
     }
     syncEndpointTracker(environmentId);
   });
@@ -807,6 +821,8 @@ app.whenReady().then(() => {
       const activeUrl = activeEp ? resolveEffectiveUrl(env.id, activeEp) : resolveActiveUrl(env.endpoints, env.activeEndpointId);
       if (activeUrl) getOrCreateSupervisor(env.id, activeUrl);
       syncEndpointTracker(env.id);
+      // Connect to the new environment's MCP server (fire-and-forget)
+      void connectMcp(env.id);
     }
     return result;
   });
@@ -1546,6 +1562,28 @@ app.whenReady().then(() => {
   safeHandle("transcript:deleteSession", async (_event, ...rawArgs) => {
     const [sessionId] = validateIpc<[string]>("transcript:deleteSession", rawArgs);
     await transcriptDeleteSession(sessionId);
+  });
+
+  // ── MCP (loop-task daemon MCP server) ────────────────────────────────
+
+  safeHandle("mcp:getStatus", (_event, ...rawArgs): McpConnectionStatus => {
+    const [environmentId] = validateIpc<[string]>("mcp:getStatus", rawArgs);
+    return getMcpStatus(environmentId);
+  });
+
+  safeHandle("mcp:connect", async (_event, ...rawArgs): Promise<McpConnectionStatus> => {
+    const [environmentId] = validateIpc<[string]>("mcp:connect", rawArgs);
+    return connectMcp(environmentId);
+  });
+
+  safeHandle("mcp:disconnect", async (_event, ...rawArgs): Promise<void> => {
+    const [environmentId] = validateIpc<[string]>("mcp:disconnect", rawArgs);
+    await disconnectMcp(environmentId);
+  });
+
+  safeHandle("mcp:callTool", async (_event, ...rawArgs): Promise<McpToolCallResult> => {
+    const [environmentId, toolName, args] = validateIpc<[string, string, Record<string, unknown>]>("mcp:callTool", rawArgs);
+    return callMcpTool(environmentId, toolName, args);
   });
 
   // Prune old breaches on startup

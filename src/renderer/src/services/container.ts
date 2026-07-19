@@ -1,5 +1,5 @@
 import { cid, container } from "inversify-hooks";
-import type { IConfigService, IConnectionService, IOpenCodeService, IVmWizardService, IInfraService, IApiService, IStreamService, ITailscaleService, INotificationService, IBudgetService, IInboxService, IOutageService, IReachabilityService, ITranscriptService } from "./interfaces";
+import type { IConfigService, IConnectionService, IOpenCodeService, IVmWizardService, IInfraService, IApiService, IStreamService, ITailscaleService, INotificationService, IBudgetService, IInboxService, IOutageService, IReachabilityService, ITranscriptService, IMcpService } from "./interfaces";
 import { ConfigService } from "./impl/ConfigService";
 import { ConnectionService } from "./impl/ConnectionService";
 import { OpenCodeService } from "./impl/OpenCodeService";
@@ -12,6 +12,7 @@ import { InboxService } from "./impl/InboxService";
 import { OutageService } from "./impl/OutageService";
 import { ReachabilityService } from "./impl/ReachabilityService";
 import { TranscriptService } from "./impl/TranscriptService";
+import { McpService } from "./impl/McpService";
 import {
   MockConfigService,
   MockConnectionService,
@@ -27,6 +28,7 @@ import {
   MockOutageService,
   MockReachabilityService,
   MockTranscriptService,
+  MockMcpService,
 } from "./mock/MockServices";
 
 let built = false;
@@ -52,6 +54,7 @@ export function buildContainer(): void {
     container.addSingleton<IOutageService>(OutageService, cid.IOutageService);
     container.addSingleton<IReachabilityService>(ReachabilityService, cid.IReachabilityService);
     container.addSingleton<ITranscriptService>(TranscriptService, cid.ITranscriptService);
+    container.addSingleton<IMcpService>(McpService, cid.IMcpService);
   } else {
     container.addSingleton<IConfigService>(MockConfigService, cid.IConfigService);
     container.addSingleton<IConnectionService>(MockConnectionService, cid.IConnectionService);
@@ -67,5 +70,6 @@ export function buildContainer(): void {
     container.addSingleton<IOutageService>(MockOutageService, cid.IOutageService);
     container.addSingleton<IReachabilityService>(MockReachabilityService, cid.IReachabilityService);
     container.addSingleton<ITranscriptService>(MockTranscriptService, cid.ITranscriptService);
+    container.addSingleton<IMcpService>(MockMcpService, cid.IMcpService);
   }
 }
