@@ -738,6 +738,59 @@ export interface NotificationBridge {
   onClick: (cb: (deepLink: DeepLinkTarget) => void) => () => void;
 }
 
+// ── MCP (loop-task daemon MCP server) ───────────────────────────────
+
+/**
+ * An MCP tool advertised by a loop-task daemon's MCP server.
+ * Tool names are discovered at runtime — never hard-coded or invented.
+ */
+export interface McpToolInfo {
+  name: string;
+  description?: string;
+  inputSchema?: unknown;
+}
+
+/**
+ * Result of an MCP tool call routed through the main process.
+ * On success, `data` contains the tool's return value.
+ * On failure, `error` contains a human-readable message surfaced in chat.
+ */
+export interface McpToolCallResult {
+  ok: boolean;
+  data?: unknown;
+  error?: string | I18nMessage;
+}
+
+/**
+ * Connection state for an environment's MCP server endpoint.
+ * - "connected": tools are available and callable.
+ * - "connecting": handshake / tool discovery in progress.
+ * - "unreachable": MCP server not responding.
+ * - "error": MCP server responded with an error (details in lastError).
+ */
+export type McpConnectionState = "connected" | "connecting" | "unreachable" | "error";
+
+export interface McpConnectionStatus {
+  environmentId: string;
+  state: McpConnectionState;
+  tools: McpToolInfo[];
+  lastError: string | I18nMessage | null;
+  connectedAt: number | null;
+}
+
+export interface McpBridge {
+  /** Get the MCP connection status for an environment. */
+  getStatus: (environmentId: string) => Promise<McpConnectionStatus>;
+  /** Connect (or reconnect) the MCP client to an environment's daemon. */
+  connect: (environmentId: string) => Promise<McpConnectionStatus>;
+  /** Disconnect an environment's MCP client. */
+  disconnect: (environmentId: string) => Promise<void>;
+  /** Call an MCP tool on an environment's daemon. Tool name must come from getStatus().tools. */
+  callTool: (environmentId: string, toolName: string, args: Record<string, unknown>) => Promise<McpToolCallResult>;
+  /** Subscribe to MCP connection status changes. */
+  onStatusChange: (cb: (status: McpConnectionStatus) => void) => () => void;
+}
+
 // ── Full IPC bridge ─────────────────────────────────────────────────
 
 export interface ConnectionBridge {
@@ -773,4 +826,5 @@ export interface LoopTaskBridge {
   outage: OutageBridge;
   reachability: ReachabilityBridge;
   transcript: TranscriptBridge;
+  mcp: McpBridge;
 }

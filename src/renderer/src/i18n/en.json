@@ -613,5 +613,23 @@
     "viewTitle": "Chat session",
     "viewDescription": "Chat with the AI agent about this project's tasks and loops.",
     "directoryLabel": "Working directory"
+  },
+  "mcp": {
+    "noEndpoint": "No endpoint available for this instance",
+    "initFailed": "MCP initialization failed: {detail}",
+    "toolsDiscoveryFailed": "Failed to discover MCP tools: {detail}",
+    "connectionTimedOut": "MCP connection timed out",
+    "connectionFailed": "MCP connection failed: {detail}",
+    "notConnected": "MCP server is not connected. Switch to a connected instance first.",
+    "unknownTool": "Unknown MCP tool: {tool}. Available tools may have changed — try reconnecting.",
+    "toolCallFailed": "MCP tool '{tool}' failed: {detail}",
+    "toolCallTimedOut": "MCP tool '{tool}' timed out",
+    "toolCallError": "MCP tool '{tool}' error: {detail}",
+    "statusConnected": "MCP connected",
+    "statusConnecting": "Connecting to MCP server…",
+    "statusUnreachable": "MCP server unreachable",
+    "statusError": "MCP error",
+    "toolsAvailable": "{count} tools available",
+    "reconnectAction": "Reconnect MCP"
   }
 }

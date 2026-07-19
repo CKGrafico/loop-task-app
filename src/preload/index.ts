@@ -32,6 +32,8 @@ import type {
   ReachabilityStatus,
   ChatSession,
   TranscriptMessage,
+  McpConnectionStatus,
+  McpToolCallResult,
 } from "../shared/ipc.js";
 
 const bridge: LoopTaskBridge = {
@@ -319,6 +321,29 @@ const bridge: LoopTaskBridge = {
       ipcRenderer.invoke("transcript:updateMessage", messageId, updates) as Promise<void>,
     deleteSession: (sessionId: string) =>
       ipcRenderer.invoke("transcript:deleteSession", sessionId) as Promise<void>,
+  },
+
+  mcp: {
+    getStatus: (environmentId: string) =>
+      ipcRenderer.invoke("mcp:getStatus", environmentId) as Promise<McpConnectionStatus>,
+    connect: (environmentId: string) =>
+      ipcRenderer.invoke("mcp:connect", environmentId) as Promise<McpConnectionStatus>,
+    disconnect: (environmentId: string) =>
+      ipcRenderer.invoke("mcp:disconnect", environmentId) as Promise<void>,
+    callTool: (environmentId: string, toolName: string, args: Record<string, unknown>) =>
+      ipcRenderer.invoke("mcp:callTool", environmentId, toolName, args) as Promise<McpToolCallResult>,
+    onStatusChange: (cb: (status: McpConnectionStatus) => void) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        status: McpConnectionStatus,
+      ): void => {
+        cb(status);
+      };
+      ipcRenderer.on("mcp:status", listener);
+      return () => {
+        ipcRenderer.removeListener("mcp:status", listener);
+      };
+    },
   },
 };
 

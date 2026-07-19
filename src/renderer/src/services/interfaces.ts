@@ -36,6 +36,8 @@ import type {
   ReachabilityStatus,
   ChatSession,
   TranscriptMessage,
+  McpConnectionStatus,
+  McpToolCallResult,
 } from "../../../shared/ipc";
 import type { LoopMeta, EnvironmentHealth } from "../types";
 
@@ -178,4 +180,17 @@ export interface ITranscriptService {
   updateMessage(messageId: string, updates: Partial<Pick<TranscriptMessage, "content" | "toolCalls" | "finishedAt">>): Promise<void>;
   /** Delete all messages for a session. */
   deleteSession(sessionId: string): Promise<void>;
+}
+
+export interface IMcpService {
+  /** Get the MCP connection status for an environment. */
+  getStatus(environmentId: string): Promise<McpConnectionStatus>;
+  /** Connect (or reconnect) the MCP client to an environment's daemon. */
+  connect(environmentId: string): Promise<McpConnectionStatus>;
+  /** Disconnect an environment's MCP client. */
+  disconnect(environmentId: string): Promise<void>;
+  /** Call an MCP tool on an environment's daemon. */
+  callTool(environmentId: string, toolName: string, args: Record<string, unknown>): Promise<McpToolCallResult>;
+  /** Subscribe to MCP connection status changes. */
+  onStatusChange(cb: (status: McpConnectionStatus) => void): () => void;
 }
