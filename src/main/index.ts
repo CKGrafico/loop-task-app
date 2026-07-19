@@ -38,6 +38,7 @@ import type {
 import type { Environment, SessionScope, NotificationSendArgs } from "../shared/ipc.js";
 import { trimTrailingSlash } from "../shared/utils.js";
 import { fetchAndUnwrap } from "./http-utils.js";
+import { parseSseStream } from "./sse-parser.js";
 import { classifyPlatform, parseGitRemoteOutput } from "./platform-classifier.js";
 import {
   getEnvironments,
@@ -420,24 +421,9 @@ async function handleStreamSubscribe(
       return;
     }
 
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    for await (const chunk of res.body) {
-      buffer += decoder.decode(chunk as Uint8Array, { stream: true });
-      let sep: number;
-      while ((sep = buffer.indexOf("\n\n")) !== -1) {
-        const block = buffer.slice(0, sep);
-        buffer = buffer.slice(sep + 2);
-        for (const line of block.split("\n")) {
-          if (line.startsWith("data: ")) {
-            send("data", line.slice(6));
-          } else if (line.startsWith("event: ")) {
-            send("event", line.slice(7));
-          }
-        }
-      }
-    }
+    await parseSseStream(res.body, (event) => {
+      send(event.kind, event.text);
+    });
     send("end", "");
   } catch (err) {
     if (!(err instanceof Error && err.name === "AbortError")) {
