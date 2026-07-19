@@ -1,4 +1,4 @@
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: No NPM_PACKAGES entry uses version "latest"
 The `NPM_PACKAGES` constant in `verified-install.ts` SHALL NOT contain any entry where `version` is the string `"latest"` or where `pkg` or `version` contain characters outside their respective safe allowlists (as defined in the `shell-safe-npm-install` spec). Every entry MUST use a pinned version string (e.g., `"2.2.2"`, `"0.0.0"`) and a package name that matches the npm package name allowlist.
@@ -21,18 +21,3 @@ A unit test SHALL exist that imports `NPM_PACKAGES` and asserts that no entry ha
 #### Scenario: CI prevents shell-unsafe characters from merging
 - **WHEN** a developer adds or modifies an entry in `NPM_PACKAGES` with shell-unsafe characters in `pkg` or `version`
 - **THEN** the unit test fails, blocking the change
-
-### Requirement: Previously unpinned entries use pinned versions
-The entries `openCode`, `jira`, and `gitlab` in `NPM_PACKAGES` MUST use specific pinned version strings instead of `"latest"`.
-
-#### Scenario: opencode uses a pinned version
-- **WHEN** `NPM_PACKAGES.openCode.version` is read
-- **THEN** it SHALL be a pinned version string, not `"latest"`
-
-#### Scenario: jira uses a pinned version
-- **WHEN** `NPM_PACKAGES.jira.version` is read
-- **THEN** it SHALL be a pinned version string, not `"latest"`
-
-#### Scenario: gitlab uses a pinned version
-- **WHEN** `NPM_PACKAGES.gitlab.version` is read
-- **THEN** it SHALL be a pinned version string, not `"latest"`
