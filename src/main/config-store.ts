@@ -2,7 +2,7 @@ import Store from "electron-store";
 import { safeStorage } from "electron";
 import type { AccessEndpoint, AgentRuntime, EndpointKind, Environment, EnvironmentRole, SessionScope, SessionToken, PairingCodeExchangeResponse, EnvironmentAuthState, OpenCodeEndpoint, SetOpenCodeEndpointResult, I18nMessage, BudgetWatch, BudgetBreach, ResolvedInboxItem, RuntimeState, ChatSession } from "../shared/ipc.js";
 import { trimTrailingSlash } from "../shared/utils.js";
-import { getCredential, removeCredential, storeCredential } from "./credential-vault.js";
+import { getCredential, pruneOrphanCredentials, removeCredential, storeCredential } from "./credential-vault.js";
 import { fetchAndUnwrap } from "./http-utils.js";
 
 interface LegacyInstance {
@@ -135,6 +135,22 @@ function mutateSessionTokens(
 // Migration (synchronous — only runs once at startup before IPC is active)
 // ---------------------------------------------------------------------------
 
+/**
+ * Collect all credential references currently in use by environments.
+ * Used by the orphan-pruning logic to determine which credentials are still needed.
+ */
+function collectActiveCredentialReferences(): Set<string> {
+  const references = new Set<string>();
+  for (const env of store.get("environments", [])) {
+    if (env.credentialRefs) {
+      for (const ref of Object.values(env.credentialRefs)) {
+        if (ref) references.add(ref);
+      }
+    }
+  }
+  return references;
+}
+
 function ensureMigrated(): void {
   if (store.get("instancesMigrated", false)) return;
 
@@ -167,12 +183,27 @@ function ensureMigrated(): void {
   store.set("instancesMigrated", true);
 }
 
+/**
+ * Run once at startup to prune orphaned credentials that no longer
+ * have any environment referencing them. Called after ensureMigrated().
+ */
+function pruneOrphanCredentialsOnStartup(): void {
+  pruneOrphanCredentials(collectActiveCredentialReferences());
+}
+
 // ---------------------------------------------------------------------------
 // Read functions (synchronous — reads are consistent per-call and never lose data)
 // ---------------------------------------------------------------------------
 
+// Track whether startup pruning has been performed to avoid repeated work.
+let startupPruningDone = false;
+
 export function getEnvironments(): EnvironmentWithFingerprint[] {
   ensureMigrated();
+  if (!startupPruningDone) {
+    startupPruningDone = true;
+    pruneOrphanCredentialsOnStartup();
+  }
   return store.get("environments", []).map((env) => ({
     ...env,
     agentRuntime: env.agentRuntime ?? "opencode",
@@ -382,6 +413,8 @@ function _removeEnvironment(id: string): void {
   if (selectedId === id) {
     store.set("selectedEnvironmentId", null);
   }
+  // Prune any orphaned credentials left behind after environment removal.
+  pruneOrphanCredentials(collectActiveCredentialReferences());
 }
 
 function _addEndpoint(environmentId: string, url: string, kind: EndpointKind): AccessEndpoint | null {
