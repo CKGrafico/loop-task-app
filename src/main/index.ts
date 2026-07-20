@@ -81,6 +81,8 @@ import {
   pruneResolvedItems,
   getProjectPickupLabels,
   setProjectPickupLabels,
+  getProjectPipelineLabels,
+  setProjectPipelineLabels,
   getChatSessions,
   addChatSession,
   removeChatSession,
@@ -874,6 +876,16 @@ app.whenReady().then(() => {
   safeHandle("config:setProjectPickupLabels", async (_event, ...rawArgs) => {
     const [projectId, labels] = validateIpc<[string, string[]]>("config:setProjectPickupLabels", rawArgs);
     await setProjectPickupLabels(projectId, labels);
+  });
+
+  safeHandle("config:getProjectPipelineLabels", (_event, ...rawArgs) => {
+    const [projectId] = validateIpc<[string]>("config:getProjectPipelineLabels", rawArgs);
+    return getProjectPipelineLabels(projectId);
+  });
+
+  safeHandle("config:setProjectPipelineLabels", async (_event, ...rawArgs) => {
+    const [projectId, labels] = validateIpc<[string, string[]]>("config:setProjectPipelineLabels", rawArgs);
+    await setProjectPipelineLabels(projectId, labels);
   });
 
   safeHandle("config:getChatSessions", () => {

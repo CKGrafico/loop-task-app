@@ -319,6 +319,12 @@ export class MockConfigService implements IConfigService {
   async setProjectPickupLabels(_projectId: string, _labels: string[]): Promise<void> {
     // mock: no-op
   }
+  async getProjectPipelineLabels(_projectId: string): Promise<string[]> {
+    return ["to-implement", "to-refine"];
+  }
+  async setProjectPipelineLabels(_projectId: string, _labels: string[]): Promise<void> {
+    // mock: no-op
+  }
   async getChatSessions(): Promise<ChatSession[]> {
     try {
       const raw = localStorage.getItem("orbion.sessions.mock");

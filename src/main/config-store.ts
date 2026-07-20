@@ -47,6 +47,7 @@ interface ConfigSchema {
   inboxDismissedIds: string[];
   inboxResolvedItems: ResolvedInboxItem[];
   projectPickupLabels: Record<string, string[]>;
+  projectPipelineLabels: Record<string, string[]>;
   chatSessions: ChatSession[];
   expandedProjects: string[];
   configStamp: ConfigStamp;
@@ -65,6 +66,7 @@ const store = new Store<ConfigSchema>({
     inboxDismissedIds: [],
     inboxResolvedItems: [],
     projectPickupLabels: {},
+    projectPipelineLabels: {},
     chatSessions: [],
     expandedProjects: [],
     configStamp: { timestamp: Date.now(), revision: 0 },
@@ -1106,6 +1108,26 @@ function _setProjectPickupLabels(projectId: string, labels: string[]): void {
 
 export function setProjectPickupLabels(projectId: string, labels: string[]): Promise<void> {
   return serialize(() => _setProjectPickupLabels(projectId, labels));
+}
+
+// ---------------------------------------------------------------------------
+// Project pipeline labels persistence
+// ---------------------------------------------------------------------------
+
+export function getProjectPipelineLabels(projectId: string): string[] {
+  const all = store.get("projectPipelineLabels", {});
+  return all[projectId] ?? [];
+}
+
+function _setProjectPipelineLabels(projectId: string, labels: string[]): void {
+  const all = store.get("projectPipelineLabels", {});
+  all[projectId] = labels;
+  store.set("projectPipelineLabels", all);
+  bumpStamp();
+}
+
+export function setProjectPipelineLabels(projectId: string, labels: string[]): Promise<void> {
+  return serialize(() => _setProjectPipelineLabels(projectId, labels));
 }
 
 // ---------------------------------------------------------------------------

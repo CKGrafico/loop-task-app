@@ -73,6 +73,12 @@ export class ConfigService implements IConfigService {
   async setProjectPickupLabels(projectId: string, labels: string[]): Promise<void> {
     return this.api.setProjectPickupLabels(projectId, labels);
   }
+  async getProjectPipelineLabels(projectId: string): Promise<string[]> {
+    return this.api.getProjectPipelineLabels(projectId);
+  }
+  async setProjectPipelineLabels(projectId: string, labels: string[]): Promise<void> {
+    return this.api.setProjectPipelineLabels(projectId, labels);
+  }
   async getChatSessions(): Promise<ChatSession[]> {
     return this.api.getChatSessions();
   }

@@ -783,7 +783,12 @@
     "fleetFinished": "{count} finished",
     "fleetFinishedAria": "Show {count} finished loop{count, plural, one {} other {s}} across the fleet",
     "fleetEmptyState": "No loops across the fleet — add an instance to begin",
-    "fleetUnknownState": "{count} loops across the fleet — status unknown"
+    "fleetUnknownState": "{count} loops across the fleet — status unknown",
+    "pipelineCount": "{count} {label}",
+    "pipelineCountAria": "Show {count} issue{count, plural, one {} other {s}} labeled {label} in chat",
+    "pipelineCountError": "{label}: ?",
+    "pipelineQuery": "issues labeled {label}",
+    "pipelineIssueStack": "**{count} issue{count, plural, one {} other {s}} labeled {label}:**"
   },
   "loopCard": {
     "interval": "interval",
