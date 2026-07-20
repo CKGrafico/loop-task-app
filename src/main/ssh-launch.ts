@@ -4,6 +4,7 @@ import { TOOL_DEFINITIONS, type ToolDefinition } from "../shared/tool-definition
 import { sshExec } from "./ssh-probe.js";
 import { validateSshHost } from "./ssh-config.js";
 import { msg } from "./i18n.js";
+import { NODE_RESOLVE_SCRIPT } from "./ssh-scripts.js";
 import {
   VERIFIED_INSTALL_FN,
   TAILSCALE_INSTALL,
@@ -215,28 +216,8 @@ mkdir -p "$LAUNCH_DIR"
 echo "orbion-managed" > "$LAUNCH_DIR/.managed"
 
 # Determine the node binary to use
-NODE_BIN=""
-if command -v node >/dev/null 2>&1; then
-  NODE_BIN="$(command -v node)"
-fi
-
-# Check version manager paths if system node is missing
-if [ -z "$NODE_BIN" ] || [ "$NODE_BIN" = "" ]; then
-  for manager_dir in \\
-    "$HOME/.nvm/versions/node" \\
-    "$HOME/.local/share/fnm/node-versions" \\
-    "$HOME/.asdf/installs/nodejs" \\
-    "$HOME/.local/share/mise/installs/node" \\
-    "$HOME/.volta/tools/node"; do
-    if [ -d "$manager_dir" ]; then
-      latest="$(find "$manager_dir" -maxdepth 4 -name 'node' -path '*/bin/node' 2>/dev/null | sort -V | tail -1)"
-      if [ -n "$latest" ]; then
-        NODE_BIN="$latest"
-        break
-      fi
-    fi
-  done
-fi
+${NODE_RESOLVE_SCRIPT}
+NODE_BIN="\${node_path}"
 
 if [ -z "$NODE_BIN" ] || [ ! -x "$NODE_BIN" ]; then
   echo "INSTALL_NODE_FIRST"
