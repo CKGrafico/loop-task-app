@@ -16,6 +16,7 @@
 import type { Page, ElectronApplication } from "playwright";
 import type { VisualEvidenceConfig } from "./config.js";
 import type { TempPaths } from "./launch/deterministic-env.js";
+import type { OptimizedScreenshot } from "./capture/screenshot.js";
 import type {
   AssertionResult,
   Scenario,
@@ -39,6 +40,13 @@ export interface ScenarioContext {
   readonly window: Page;
   readonly temp: TempPaths;
   readonly config: VisualEvidenceConfig;
+  readonly captureCheckpoint: (label: string, caption: string) => Promise<void>;
+}
+
+export interface CapturedCheckpoint {
+  readonly label: string;
+  readonly caption: string;
+  readonly screenshot: OptimizedScreenshot;
 }
 
 export interface ScenarioResult {
