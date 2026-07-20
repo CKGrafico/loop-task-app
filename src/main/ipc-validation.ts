@@ -433,6 +433,10 @@ const validators: Record<string, Validator> = {
     const issues: string[] = [];
     if (!isNonEmptyString(args[0])) issues.push("sessionId must be a non-empty string");
     if (!isObject(args[1])) issues.push("updates must be an object");
+    if (isObject(args[1])) {
+      const u = args[1] as Record<string, unknown>;
+      if (u.projectName !== undefined && !isNonEmptyString(u.projectName)) issues.push("projectName must be a non-empty string if provided");
+    }
     return issues;
   },
 

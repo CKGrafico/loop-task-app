@@ -89,7 +89,10 @@
     "loopUnknown": "unknown",
     "sessionCount": "{count} sessions",
     "sessionActive": "active",
-    "openProjectChat": "Open in chat"
+    "openProjectChat": "Open in chat",
+    "moveToProject": "Move to project",
+    "sessionMoved": "Chat moved to \"{project}\"",
+    "moveToProjectUnavailable": "No instance has the project \"{project}\""
   },
   "vmWizard": {
     "stepPickReachMethod": "Choose reach method",
