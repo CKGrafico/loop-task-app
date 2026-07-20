@@ -2,6 +2,8 @@ import { app, BrowserWindow, ipcMain, shell, dialog } from "electron";
 import path from "node:path";
 import fs from "node:fs";
 import { execFile } from "node:child_process";
+import { logger, createLogger } from "./logger.js";
+import type { LogEntry } from "../shared/log.js";
 import type {
   ApiRequestArgs,
   ApiResponse,
@@ -621,6 +623,12 @@ app.on("second-instance", () => {
 app.setName("Orbion");
 
 app.whenReady().then(() => {
+  ipcMain.handle("log:write", (_event, entry: LogEntry) => {
+    const scopedLogger = entry.module ? createLogger(entry.module) : logger;
+    const ctx = entry.context ? ` ${JSON.stringify(entry.context)}` : "";
+    scopedLogger[entry.level](`${entry.message}${ctx}`);
+  });
+
   safeHandle("api:request", (_event, ...rawArgs) => {
     const [args] = validateIpc<[ApiRequestArgs]>("api:request", rawArgs);
     return handleApiRequest(args);
