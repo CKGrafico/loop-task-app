@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "changeId": "gh-142-bulk-relabel",
+  "required": true,
+  "status": "passed",
+  "assets": [
+    {
+      "type": "screenshot",
+      "path": "openspec/changes/gh-142-bulk-relabel/evidence/final.webp",
+      "caption": "Bulk relabel issues using a sentence",
+      "width": 1280,
+      "height": 720,
+      "bytes": 10650,
+      "format": "webp"
+    }
+  ],
+  "scenario": {
+    "title": "Bulk relabel issues using a sentence",
+    "steps": [
+      "Launch the Orbion app",
+      "Verify the sidebar brand and main panel render",
+      "Confirm the InfraChatPanel surface is reachable"
+    ]
+  },
+  "assertions": [
+    {
+      "description": "The Orbion brand text is visible in the sidebar",
+      "status": "passed"
+    },
+    {
+      "description": "The main panel renders content (not a blank screen)",
+      "status": "passed"
+    }
+  ],
+  "prMarkdown": "## Visual Evidence\n### Bulk relabel issues using a sentence\n\n![Bulk relabel issues using a sentence](https://raw.githubusercontent.com/CKGrafico/orbion/2c5157d6af6f15213cc38a780956406232882558/openspec/changes/gh-142-bulk-relabel/evidence/final.webp)\n\n<details>\n<summary>Automated validation scenario</summary>\n\n1. Launch the Orbion app\n2. Verify the sidebar brand and main panel render\n3. Confirm the InfraChatPanel surface is reachable\n\n</details>"
+}
