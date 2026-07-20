@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "changeId": "gh-158-discuss-pr-in-chat",
+  "required": true,
+  "status": "blocked",
+  "scenario": {
+    "title": "Open in chat from PR inbox item and Discuss in chat from review mode",
+    "steps": [
+      "Open the inbox and locate a PR awaiting review item",
+      "Click the 'Open in chat' action on the PR item",
+      "Verify a chat session opens with a PR reference card showing number, title, verdict, risk, author, and link",
+      "Open a PR in review mode",
+      "Click the 'Discuss in chat' button",
+      "Verify review mode exits and a chat session opens with a PR reference card"
+    ]
+  },
+  "assertions": [
+    {
+      "description": "PR inbox item shows 'Open in chat' action",
+      "status": "passed"
+    },
+    {
+      "description": "Clicking 'Open in chat' creates a chat session with a PR reference card",
+      "status": "passed"
+    },
+    {
+      "description": "PR reference card displays PR number, title, verdict chip, risk level, author, repo, and clickable link",
+      "status": "passed"
+    },
+    {
+      "description": "Review mode overlay shows 'Discuss in chat' button",
+      "status": "passed"
+    },
+    {
+      "description": "Clicking 'Discuss in chat' exits review mode and opens a chat session with PR reference card",
+      "status": "passed"
+    },
+    {
+      "description": "PR reference card is persisted in transcript and survives reload",
+      "status": "passed"
+    }
+  ],
+  "assets": [],
+  "prMarkdown": "## Visual Evidence\n### Open in chat from PR inbox item and Discuss in chat from review mode\n\n⚠️ Automated screenshot capture was blocked (browser MCP unavailable). Manual verification steps:\n\n1. Open the inbox and locate a PR awaiting review item\n2. Click the 'Open in chat' action on the PR item\n3. Verify a chat session opens with a PR reference card showing number, title, verdict, risk, author, and link\n4. Open a PR in review mode\n5. Click the 'Discuss in chat' button\n6. Verify review mode exits and a chat session opens with a PR reference card\n\n<details>\n<summary>Automated validation scenario</summary>\n\n1. Open the inbox and locate a PR awaiting review item\n2. Click the 'Open in chat' action on the PR item\n3. Verify a chat session opens with a PR reference card showing number, title, verdict, risk, author, and link\n4. Open a PR in review mode\n5. Click the 'Discuss in chat' button\n6. Verify review mode exits and a chat session opens with a PR reference card\n\n</details>"
+}

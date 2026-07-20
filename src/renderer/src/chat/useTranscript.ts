@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { cid, useInject } from "inversify-hooks";
 import type { TranscriptMessage, ToolCallRecord } from "../../../shared/ipc";
 import type { ITranscriptService } from "../services/interfaces";
-import type { AccessMode, ApprovalDecision, ChatTurn, ChatMessage, ToolCall, TranscriptRow, ToolCallRow, ToolCallsExpanderRow, TurnFoldRow, ApprovalRow, QuestionRow, InstanceHandoffRow, LoopCardRow, LoopProposalRow, LoopProposalStatus, ChainEditProposalRow, ChainEditProposalStatus, SharedTaskWarning, SiblingOfferRow, SiblingOfferStatus, FailureDiagnosisRow } from "./types";
+import type { AccessMode, ApprovalDecision, ChatTurn, ChatMessage, ToolCall, TranscriptRow, ToolCallRow, ToolCallsExpanderRow, TurnFoldRow, ApprovalRow, QuestionRow, InstanceHandoffRow, LoopCardRow, LoopProposalRow, LoopProposalStatus, ChainEditProposalRow, ChainEditProposalStatus, SharedTaskWarning, SiblingOfferRow, SiblingOfferStatus, FailureDiagnosisRow, PrReferenceCardRow } from "./types";
 import type { FailureCategory } from "./diagnoseFailure";
 
 const TOOL_CALLS_THRESHOLD = 3;
@@ -79,7 +79,7 @@ function transcriptMessageToChatMessage(tm: TranscriptMessage): ChatMessage {
  * (e.g., instance switch, runtime switch, model switch).
  */
 function isSystemNoteMessage(msg: TranscriptMessage): boolean {
-  return msg.id.startsWith("instance-switch-") || msg.id.startsWith("runtime-switch-") || msg.id.startsWith("model-switch-") || msg.id.startsWith("loop-summon-") || msg.id.startsWith("loop-proposal-") || msg.id.startsWith("chain-edit-proposal-") || msg.id.startsWith("sibling-offer-") || msg.id.startsWith("failure-diagnosis-");
+  return msg.id.startsWith("instance-switch-") || msg.id.startsWith("runtime-switch-") || msg.id.startsWith("model-switch-") || msg.id.startsWith("loop-summon-") || msg.id.startsWith("loop-proposal-") || msg.id.startsWith("chain-edit-proposal-") || msg.id.startsWith("sibling-offer-") || msg.id.startsWith("failure-diagnosis-") || msg.id.startsWith("pr-ref-");
 }
 
 /**
@@ -288,6 +288,38 @@ function parseChainEditProposalMessage(msg: TranscriptMessage): ChainEditProposa
 }
 
 /**
+ * Check whether a transcript message is a PR reference card record.
+ * These use the convention: id starts with "pr-ref-", role "user".
+ */
+function isPrReferenceCardMessage(msg: TranscriptMessage): boolean {
+  return msg.id.startsWith("pr-ref-");
+}
+
+/**
+ * Parse a PR reference card transcript message into a PrReferenceCardRow.
+ * Returns null if parsing fails.
+ */
+function parsePrReferenceCardMessage(msg: TranscriptMessage): PrReferenceCardRow | null {
+  try {
+    const parsed = JSON.parse(msg.content);
+    if (parsed.kind !== "pr-reference-card") return null;
+    return {
+      id: msg.id,
+      kind: "pr-reference-card",
+      turnId: msg.id,
+      prNumber: parsed.prNumber ?? 0,
+      prTitle: parsed.prTitle ?? "",
+      prRepo: parsed.prRepo ?? "",
+      prAuthor: parsed.prAuthor ?? "",
+      prUrl: parsed.prUrl ?? "",
+      prVerdict: parsed.prVerdict ?? undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Group transcript messages into turns by pairing user and assistant messages.
  * Messages are assumed to arrive in order: user, assistant, user, assistant, ...
  * Tool messages (if any) are merged into the preceding assistant message.
@@ -369,7 +401,7 @@ function messagesToChatTurns(messages: TranscriptMessage[]): ChatTurn[] {
 // Row building
 // ---------------------------------------------------------------------------
 
-function buildRowsFromTurns(turns: ChatTurn[], handoffMessages: TranscriptMessage[] = [], loopSummonMessages: TranscriptMessage[] = [], loopProposalMessages: TranscriptMessage[] = [], chainEditProposalMessages: TranscriptMessage[] = [], siblingOfferMessages: TranscriptMessage[] = [], failureDiagnosisMessages: TranscriptMessage[] = []): TranscriptRow[] {
+function buildRowsFromTurns(turns: ChatTurn[], handoffMessages: TranscriptMessage[] = [], loopSummonMessages: TranscriptMessage[] = [], loopProposalMessages: TranscriptMessage[] = [], chainEditProposalMessages: TranscriptMessage[] = [], siblingOfferMessages: TranscriptMessage[] = [], failureDiagnosisMessages: TranscriptMessage[] = [], prRefMessages: TranscriptMessage[] = []): TranscriptRow[] {
   const rows: TranscriptRow[] = [];
 
   // Build handoff rows from system note messages
@@ -448,6 +480,15 @@ function buildRowsFromTurns(turns: ChatTurn[], handoffMessages: TranscriptMessag
       // Place the diagnosis right after its associated loop card:
       // use a timestamp 1ms after the loop-summon timestamp (encoded in the message ID)
       failureDiagnosisRows.push({ row: diagnosisRow, timestamp: msg.startedAt + 1 });
+    }
+  }
+
+  // Build PR reference card rows from pr-ref messages
+  const prRefRows: Array<{ row: PrReferenceCardRow; timestamp: number }> = [];
+  for (const msg of prRefMessages) {
+    const prRefRow = parsePrReferenceCardMessage(msg);
+    if (prRefRow) {
+      prRefRows.push({ row: prRefRow, timestamp: msg.startedAt });
     }
   }
 
@@ -536,8 +577,8 @@ function buildRowsFromTurns(turns: ChatTurn[], handoffMessages: TranscriptMessag
     turnRows.push({ rows: turnRowsList, timestamp: turn.userMessage.startedAt });
   }
 
-  // Merge turn groups, handoff dividers, loop-card rows, loop-proposal rows, chain-edit-proposal rows, and failure-diagnosis rows by timestamp
-  type MergeItem = { kind: "turn"; rows: TranscriptRow[]; timestamp: number } | { kind: "handoff"; row: InstanceHandoffRow; timestamp: number } | { kind: "loop-card"; row: LoopCardRow; timestamp: number } | { kind: "loop-proposal"; row: LoopProposalRow; timestamp: number } | { kind: "chain-edit-proposal"; row: ChainEditProposalRow; timestamp: number } | { kind: "sibling-offer"; row: SiblingOfferRow; timestamp: number } | { kind: "failure-diagnosis"; row: FailureDiagnosisRow; timestamp: number };
+  // Merge turn groups, handoff dividers, loop-card rows, loop-proposal rows, chain-edit-proposal rows, failure-diagnosis rows, and PR reference card rows by timestamp
+  type MergeItem = { kind: "turn"; rows: TranscriptRow[]; timestamp: number } | { kind: "handoff"; row: InstanceHandoffRow; timestamp: number } | { kind: "loop-card"; row: LoopCardRow; timestamp: number } | { kind: "loop-proposal"; row: LoopProposalRow; timestamp: number } | { kind: "chain-edit-proposal"; row: ChainEditProposalRow; timestamp: number } | { kind: "sibling-offer"; row: SiblingOfferRow; timestamp: number } | { kind: "failure-diagnosis"; row: FailureDiagnosisRow; timestamp: number } | { kind: "pr-reference-card"; row: PrReferenceCardRow; timestamp: number };
   const merged: MergeItem[] = [
     ...turnRows.map((t) => ({ kind: "turn" as const, rows: t.rows, timestamp: t.timestamp })),
     ...handoffRows.map((h) => ({ kind: "handoff" as const, row: h.row, timestamp: h.timestamp })),
@@ -546,6 +587,7 @@ function buildRowsFromTurns(turns: ChatTurn[], handoffMessages: TranscriptMessag
     ...chainEditProposalRows.map((c) => ({ kind: "chain-edit-proposal" as const, row: c.row, timestamp: c.timestamp })),
     ...siblingOfferRows.map((s) => ({ kind: "sibling-offer" as const, row: s.row, timestamp: s.timestamp })),
     ...failureDiagnosisRows.map((d) => ({ kind: "failure-diagnosis" as const, row: d.row, timestamp: d.timestamp })),
+    ...prRefRows.map((p) => ({ kind: "pr-reference-card" as const, row: p.row, timestamp: p.timestamp })),
   ];
   merged.sort((a, b) => a.timestamp - b.timestamp);
 
@@ -561,6 +603,8 @@ function buildRowsFromTurns(turns: ChatTurn[], handoffMessages: TranscriptMessag
     } else if (item.kind === "sibling-offer") {
       rows.push(item.row);
     } else if (item.kind === "failure-diagnosis") {
+      rows.push(item.row);
+    } else if (item.kind === "pr-reference-card") {
       rows.push(item.row);
     } else {
       rows.push(...item.rows);
@@ -582,6 +626,7 @@ export function useTranscript(sessionId: string | null) {
   const [chainEditProposalMessages, setChainEditProposalMessages] = useState<TranscriptMessage[]>([]);
   const [siblingOfferMessages, setSiblingOfferMessages] = useState<TranscriptMessage[]>([]);
   const [failureDiagnosisMessages, setFailureDiagnosisMessages] = useState<TranscriptMessage[]>([]);
+  const [prRefMessages, setPrRefMessages] = useState<TranscriptMessage[]>([]);
   const [rows, setRows] = useState<TranscriptRow[]>([]);
   const expandedToolsRef = useRef<Set<string>>(new Set());
   const [transcriptService] = useInject<ITranscriptService>(cid.ITranscriptService);
@@ -649,12 +694,13 @@ export function useTranscript(sessionId: string | null) {
       if (cancelled) return;
       const hydratedTurns = messagesToChatTurns(messages);
       const systemNotes = messages.filter(isSystemNoteMessage);
-      const handoffs = systemNotes.filter((m) => !isLoopSummonMessage(m) && !isLoopProposalMessage(m) && !isChainEditProposalMessage(m) && !isSiblingOfferMessage(m) && !isFailureDiagnosisMessage(m));
+      const handoffs = systemNotes.filter((m) => !isLoopSummonMessage(m) && !isLoopProposalMessage(m) && !isChainEditProposalMessage(m) && !isSiblingOfferMessage(m) && !isFailureDiagnosisMessage(m) && !isPrReferenceCardMessage(m));
       const loopSummons = systemNotes.filter(isLoopSummonMessage);
       const loopProposals = systemNotes.filter(isLoopProposalMessage);
       const chainEditProposals = systemNotes.filter(isChainEditProposalMessage);
       const siblingOffers = systemNotes.filter(isSiblingOfferMessage);
       const failureDiagnoses = systemNotes.filter(isFailureDiagnosisMessage);
+      const prRefs = systemNotes.filter(isPrReferenceCardMessage);
       setTurns(hydratedTurns);
       setHandoffMessages(handoffs);
       setLoopSummonMessages(loopSummons);
@@ -662,7 +708,8 @@ export function useTranscript(sessionId: string | null) {
       setChainEditProposalMessages(chainEditProposals);
       setSiblingOfferMessages(siblingOffers);
       setFailureDiagnosisMessages(failureDiagnoses);
-      setRows(buildRowsFromTurns(hydratedTurns, handoffs, loopSummons, loopProposals, chainEditProposals, siblingOffers, failureDiagnoses));
+      setPrRefMessages(prRefs);
+      setRows(buildRowsFromTurns(hydratedTurns, handoffs, loopSummons, loopProposals, chainEditProposals, siblingOffers, failureDiagnoses, prRefs));
       loadedSessionRef.current = sessionId;
       loadingRef.current = false;
     }).catch(() => {
@@ -681,16 +728,16 @@ export function useTranscript(sessionId: string | null) {
   turnsRef.current = turns;
 
   const rebuildRows = useCallback((newTurns: ChatTurn[]): TranscriptRow[] => {
-    const newRows = buildRowsFromTurns(newTurns, handoffMessages, loopSummonMessages, loopProposalMessages, chainEditProposalMessages, siblingOfferMessages, failureDiagnosisMessages);
+    const newRows = buildRowsFromTurns(newTurns, handoffMessages, loopSummonMessages, loopProposalMessages, chainEditProposalMessages, siblingOfferMessages, failureDiagnosisMessages, prRefMessages);
     setRows(newRows);
     return newRows;
-  }, [handoffMessages, loopSummonMessages, loopProposalMessages, chainEditProposalMessages, siblingOfferMessages, failureDiagnosisMessages]);
+  }, [handoffMessages, loopSummonMessages, loopProposalMessages, chainEditProposalMessages, siblingOfferMessages, failureDiagnosisMessages, prRefMessages]);
 
-  // Rebuild rows when handoffMessages, loopSummonMessages, loopProposalMessages, chainEditProposalMessages, siblingOfferMessages, or failureDiagnosisMessages changes
+  // Rebuild rows when handoffMessages, loopSummonMessages, loopProposalMessages, chainEditProposalMessages, siblingOfferMessages, failureDiagnosisMessages, or prRefMessages changes
   useEffect(() => {
-    const newRows = buildRowsFromTurns(turnsRef.current, handoffMessages, loopSummonMessages, loopProposalMessages, chainEditProposalMessages, siblingOfferMessages, failureDiagnosisMessages);
+    const newRows = buildRowsFromTurns(turnsRef.current, handoffMessages, loopSummonMessages, loopProposalMessages, chainEditProposalMessages, siblingOfferMessages, failureDiagnosisMessages, prRefMessages);
     setRows(newRows);
-  }, [handoffMessages, loopSummonMessages, loopProposalMessages, chainEditProposalMessages, siblingOfferMessages, failureDiagnosisMessages]);
+  }, [handoffMessages, loopSummonMessages, loopProposalMessages, chainEditProposalMessages, siblingOfferMessages, failureDiagnosisMessages, prRefMessages]);
 
   const setTurnsAndRebuild = useCallback(
     (updater: (prev: ChatTurn[]) => ChatTurn[]) => {
@@ -1289,12 +1336,13 @@ export function useTranscript(sessionId: string | null) {
     transcriptService.getMessages(sessionId).then((messages) => {
       const hydratedTurns = messagesToChatTurns(messages);
       const systemNotes = messages.filter(isSystemNoteMessage);
-      const handoffs = systemNotes.filter((m) => !isLoopSummonMessage(m) && !isLoopProposalMessage(m) && !isChainEditProposalMessage(m) && !isSiblingOfferMessage(m) && !isFailureDiagnosisMessage(m));
+      const handoffs = systemNotes.filter((m) => !isLoopSummonMessage(m) && !isLoopProposalMessage(m) && !isChainEditProposalMessage(m) && !isSiblingOfferMessage(m) && !isFailureDiagnosisMessage(m) && !isPrReferenceCardMessage(m));
       const loopSummons = systemNotes.filter(isLoopSummonMessage);
       const loopProposals = systemNotes.filter(isLoopProposalMessage);
       const chainEditProposals = systemNotes.filter(isChainEditProposalMessage);
       const siblingOffers = systemNotes.filter(isSiblingOfferMessage);
       const failureDiagnoses = systemNotes.filter(isFailureDiagnosisMessage);
+      const prRefs = systemNotes.filter(isPrReferenceCardMessage);
       setTurns(hydratedTurns);
       setHandoffMessages(handoffs);
       setLoopSummonMessages(loopSummons);
@@ -1302,12 +1350,50 @@ export function useTranscript(sessionId: string | null) {
       setChainEditProposalMessages(chainEditProposals);
       setSiblingOfferMessages(siblingOffers);
       setFailureDiagnosisMessages(failureDiagnoses);
-      setRows(buildRowsFromTurns(hydratedTurns, handoffs, loopSummons, loopProposals, chainEditProposals, siblingOffers, failureDiagnoses));
+      setPrRefMessages(prRefs);
+      setRows(buildRowsFromTurns(hydratedTurns, handoffs, loopSummons, loopProposals, chainEditProposals, siblingOffers, failureDiagnoses, prRefs));
       loadedSessionRef.current = sessionId;
     }).catch(() => {
       // Ignore errors
     });
   }, [sessionId, transcriptService]);
+
+  /**
+   * Insert a PR reference card into the transcript. This creates a persisted
+   * "pr-ref" system message (role "user", id starting with "pr-ref-")
+   * whose content is JSON with the PR reference card fields.
+   */
+  const insertPrReferenceCard = useCallback(
+    (params: Omit<PrReferenceCardRow, "id" | "kind" | "turnId">) => {
+      if (!sessionId) return;
+
+      const timestamp = Date.now();
+      const messageId = `pr-ref-${timestamp}`;
+
+      const message: Omit<TranscriptMessage, "createdAt"> = {
+        id: messageId,
+        sessionId,
+        role: "user",
+        content: JSON.stringify({
+          kind: "pr-reference-card",
+          prNumber: params.prNumber,
+          prTitle: params.prTitle,
+          prRepo: params.prRepo,
+          prAuthor: params.prAuthor,
+          prUrl: params.prUrl,
+          prVerdict: params.prVerdict,
+        }),
+        startedAt: timestamp,
+        finishedAt: timestamp,
+      };
+
+      // Persist the PR reference card message
+      void transcriptService.appendMessage(message).then((persisted) => {
+        setPrRefMessages((prev) => [...prev, persisted]);
+      });
+    },
+    [sessionId, transcriptService],
+  );
 
   return {
     turns,
@@ -1334,6 +1420,7 @@ export function useTranscript(sessionId: string | null) {
     updateChainEditProposalForkDecision,
     insertSiblingOffer,
     updateSiblingOfferStatus,
+    insertPrReferenceCard,
     reloadTranscript,
   };
 }

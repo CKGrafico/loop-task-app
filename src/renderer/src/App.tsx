@@ -1238,8 +1238,56 @@ function AppInner(): React.ReactNode {
             // Dismissal is handled internally by InboxView
           }}
           onOpenInChat={(item) => {
-            select(item.environmentId);
-            setView({ kind: "instance" });
+            if (item.kind === "pr-awaiting-review" && item.prNumber && item.prRepo) {
+              // Open a chat session scoped to the PR's project with a PR reference card inserted
+              const envId = item.environmentId;
+              const env = environments.find((e) => e.id === envId);
+              const defaultRuntime = env?.agentRuntime ?? "opencode";
+              const envModelList = envModels[envId] ?? [];
+              const defaultModel = envModelList.find((m) => m.available)?.id;
+              void configService
+                .addChatSession({
+                  title: `PR #${item.prNumber}: ${item.title}`,
+                  projectName: "Default",
+                  environmentId: envId,
+                  workingDirectory: `~/${item.prRepo}`,
+                  activeRuntime: defaultRuntime,
+                  activeModel: defaultModel,
+                  lastActiveAt: new Date().toISOString(),
+                  persisted: true,
+                })
+                .then((newSession) => {
+                  setActiveSessionId(newSession.id);
+                  setView({ kind: "session", sessionId: newSession.id });
+                  select(envId);
+                  // Insert a PR reference card into the transcript after a brief delay
+                  // to ensure the SessionChatView has mounted and the useTranscript hook is ready
+                  setTimeout(() => {
+                    void transcriptService.appendMessage({
+                      id: `pr-ref-${Date.now()}`,
+                      sessionId: newSession.id,
+                      role: "user",
+                      content: JSON.stringify({
+                        kind: "pr-reference-card",
+                        prNumber: item.prNumber,
+                        prTitle: item.title ?? "",
+                        prRepo: item.prRepo ?? "",
+                        prAuthor: item.prAuthor ?? "",
+                        prUrl: item.prUrl ?? "",
+                        prVerdict: item.prVerdict,
+                      }),
+                      startedAt: Date.now(),
+                      finishedAt: Date.now(),
+                    }).then(() => {
+                      // Trigger a reload so the useTranscript hook picks up the new message
+                      // This is handled by the hook's loadedSessionRef reset
+                    });
+                  }, 100);
+                });
+            } else {
+              select(item.environmentId);
+              setView({ kind: "instance" });
+            }
           }}
         />
       );
@@ -1736,7 +1784,55 @@ function AppInner(): React.ReactNode {
               ) : null}
 
               {/* PR review mode overlay */}
-              {reviewModeItem ? <ReviewModeOverlay /> : null}
+              {reviewModeItem ? (
+                <ReviewModeOverlay
+                  onDiscussInChat={(item) => {
+                    // Exit review mode
+                    reviewModeService.exit();
+                    // Open a chat session scoped to the PR's project with a PR reference card inserted
+                    const envId = mainVm?.id ?? item.repo;
+                    const env = environments.find((e) => e.id === envId);
+                    const defaultRuntime = env?.agentRuntime ?? "opencode";
+                    const envModelList = envModels[envId] ?? [];
+                    const defaultModel = envModelList.find((m) => m.available)?.id;
+                    void configService
+                      .addChatSession({
+                        title: `PR #${item.number}: ${item.title}`,
+                        projectName: "Default",
+                        environmentId: envId,
+                        workingDirectory: `~/${item.repo}`,
+                        activeRuntime: defaultRuntime,
+                        activeModel: defaultModel,
+                        lastActiveAt: new Date().toISOString(),
+                        persisted: true,
+                      })
+                      .then((newSession) => {
+                        setActiveSessionId(newSession.id);
+                        setView({ kind: "session", sessionId: newSession.id });
+                        if (envId) select(envId);
+                        // Insert a PR reference card
+                        setTimeout(() => {
+                          void transcriptService.appendMessage({
+                            id: `pr-ref-${Date.now()}`,
+                            sessionId: newSession.id,
+                            role: "user",
+                            content: JSON.stringify({
+                              kind: "pr-reference-card",
+                              prNumber: item.number,
+                              prTitle: item.title,
+                              prRepo: item.repo,
+                              prAuthor: item.author,
+                              prUrl: item.url,
+                              prVerdict: item.verdict,
+                            }),
+                            startedAt: Date.now(),
+                            finishedAt: Date.now(),
+                          });
+                        }, 100);
+                      });
+                  }}
+                />
+              ) : null}
             </div>
           </>
         )}
