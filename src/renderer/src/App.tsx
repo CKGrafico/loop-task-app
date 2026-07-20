@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useIntl } from "react-intl";
 import type { ConnectionStatus, EndpointHealth, OpenCodeConnectionStatus, BudgetBreach, DeepLinkTarget, OutageEscalation, ReachabilityState, ChatSession, AgentRuntime, BootstrapSeed, RestoreAvailability, PullRestoreResult, ModelInfo, ReasoningEffort } from "../../shared/ipc";
-import type { Environment, EnvironmentHealth, LoopMeta, Project } from "./types";
+import type { Environment, EnvironmentHealth, LoopMeta, Project, FleetLoopRollup, LoopWithOrigin } from "./types";
 import type { FleetItemStatus } from "./fleet-status";
 import { rollUpEnvironmentStatus, isNotifiableStatus } from "./fleet-status";
 import { loopStatusToFleetItem } from "./fleet-mapping";
+import { computeFleetRollup } from "./fleet-rollup";
 import { useEnvironments } from "./store";
 import { OrbionMark } from "./components/OrbionMark";
 import { ColdOpen } from "./components/ColdOpen";
@@ -1198,6 +1199,10 @@ function AppInner(): React.ReactNode {
         const session = sessions.find((s) => s.id === view.sessionId);
         const sessionEnvId = session?.environmentId ?? selected?.id ?? "";
         const sessionEnv = environments.find((e) => e.id === sessionEnvId);
+
+        // Determine if this session is un-homed (no project + no instance → fleet tier)
+        const isUnhomed = !session?.projectName || !session?.environmentId;
+
         // Scope loops to the session's project x instance
         const projectName = session?.projectName;
         const envProjects = perEnvProjects[sessionEnvId] ?? [];
@@ -1207,6 +1212,12 @@ function AppInner(): React.ReactNode {
         const sessionLoops = sessionProject
           ? (perEnvLoops[sessionEnvId] ?? []).filter((l) => (l.projectId ?? "default") === sessionProject.id)
           : perEnvLoops[sessionEnvId] ?? [];
+
+        // Compute fleet rollup for un-homed sessions
+        const fleetRollup: FleetLoopRollup | undefined = isUnhomed
+          ? computeFleetRollup(perEnvLoops, environments, perEnvProjects, reachability)
+          : undefined;
+
         return (
           <SessionChatView
             sessionId={view.sessionId}
@@ -1217,7 +1228,7 @@ function AppInner(): React.ReactNode {
             reasoningEffort={session?.reasoningEffort}
             environments={environments.map((e) => ({ id: e.id, name: e.name }))}
             reachability={reachability[sessionEnvId]}
-            loops={sessionLoops}
+            loops={isUnhomed ? [] : sessionLoops}
             perEnvLoops={perEnvLoops}
             instance={sessionEnv}
             isEphemeral={!session?.persisted}
@@ -1227,6 +1238,9 @@ function AppInner(): React.ReactNode {
             autoPersistedJustNow={getAutoPersistedJustNow(view.sessionId)}
             onDeclineAutoPersist={() => handleDeclineAutoPersist(view.sessionId)}
             onUnpersistSession={() => setConfirmUnpersistId(view.sessionId)}
+            fleetMode={isUnhomed}
+            fleetRollup={fleetRollup}
+            fleetLoopsWithOrigin={fleetRollup?.loopsWithOrigin}
           />
         );
       }
