@@ -262,10 +262,12 @@ export function Sidebar(props: {
     return [...byName.values()];
   }, [environments, perEnvProjects, perEnvLoops, mainVmId]);
 
-  // Group sessions by project name
+  // Group sessions by project name — only persisted sessions appear in the sidebar
   const sessionsByProject = useMemo(() => {
     const map = new Map<string, ChatSession[]>();
     for (const session of sessions) {
+      // Ephemeral (scratch) sessions are not listed in the sidebar
+      if (!session.persisted) continue;
       const existing = map.get(session.projectName) ?? [];
       existing.push(session);
       map.set(session.projectName, existing);
@@ -316,10 +318,12 @@ export function Sidebar(props: {
         (l) => l.id === view.loopId && node.instances.some((inst) => inst.envId === selectedId && inst.loops.some((il) => il.id === l.id)),
       );
     }
-    // Also selected if any child session is active
+    // Also selected if any child session is active (includes ephemeral sessions)
     if (view.kind === "session") {
-      const projSessions = sessionsByProject.get(node.projectName) ?? [];
-      return projSessions.some((s) => s.id === activeSessionId);
+      // Check both persisted (listed) and ephemeral sessions so the project
+      // node highlights even when the active session is scratch/unsaved.
+      const activeSession = sessions.find((s) => s.id === activeSessionId);
+      return !!activeSession && activeSession.projectName === node.projectName;
     }
     return false;
   };

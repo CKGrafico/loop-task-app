@@ -854,6 +854,13 @@ export function App(): React.ReactNode {
     void configService.getChatSessions().then((s) => setSessions(s));
   }, [sessions, environments, configService, transcriptService, agentService, mcpService, intl]);
 
+  /** Persist an ephemeral (scratch) session so it appears in the sidebar. */
+  const handlePersistSession = useCallback((sessionId: string): void => {
+    void configService.updateChatSession(sessionId, { persisted: true });
+    // Refresh sessions in local state
+    void configService.getChatSessions().then((s) => setSessions(s));
+  }, [configService]);
+
   const updatedLabel =
     lastUpdated === null ? "..." : timeAgo(new Date(lastUpdated).toISOString());
 
@@ -981,6 +988,8 @@ export function App(): React.ReactNode {
             loops={sessionLoops}
             perEnvLoops={perEnvLoops}
             instance={sessionEnv}
+            isEphemeral={!session?.persisted}
+            onPersistSession={() => handlePersistSession(view.sessionId)}
           />
         );
       }
@@ -1044,6 +1053,11 @@ export function App(): React.ReactNode {
           <div className="main-header">
             <span className="dot" style={{ background: projectColor }} />
             <span className="main-title">{session.projectName}</span>
+            {!session.persisted ? (
+              <span className="chip chip-ephemeral" title={intl.formatMessage({ id: "session.ephemeralMarker" })}>
+                {intl.formatMessage({ id: "session.ephemeralMarker" })}
+              </span>
+            ) : null}
             {session.workingDirectory ? (
               <span className="chip mono session-directory" title={session.workingDirectory}>
                 {session.workingDirectory}
@@ -1312,6 +1326,7 @@ export function App(): React.ReactNode {
                           activeRuntime: defaultRuntime,
                           activeModel: defaultModel,
                           lastActiveAt: new Date().toISOString(),
+                          persisted: false,
                         })
                         .then((newSession) => {
                           setActiveSessionId(newSession.id);

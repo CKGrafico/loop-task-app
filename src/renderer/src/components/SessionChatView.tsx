@@ -102,9 +102,13 @@ interface SessionChatViewProps {
   perEnvLoops: Record<string, LoopMeta[]>;
   /** The full environment instance, for log tail in loop cards. */
   instance?: Environment;
+  /** Whether this session is ephemeral (scratch). */
+  isEphemeral?: boolean;
+  /** Callback to persist (save) an ephemeral session. */
+  onPersistSession?: () => void;
 }
 
-export function SessionChatView({ sessionId, environmentId, environmentName, activeRuntime, model, reasoningEffort, environments, reachability, loops, perEnvLoops, instance }: SessionChatViewProps): React.ReactNode {
+export function SessionChatView({ sessionId, environmentId, environmentName, activeRuntime, model, reasoningEffort, environments, reachability, loops, perEnvLoops, instance, isEphemeral = false, onPersistSession }: SessionChatViewProps): React.ReactNode {
   const intl = useIntl();
   const [agentService] = useInject<IAgentService>(cid.IAgentService);
   const [mcpService] = useInject<IMcpService>(cid.IMcpService);
@@ -693,6 +697,8 @@ export function SessionChatView({ sessionId, environmentId, environmentName, act
         drafts={drafts}
         onDraftChange={handleDraftChange}
         isReachable={isReachable}
+        isEphemeral={isEphemeral}
+        onPersistSession={onPersistSession}
       />
     </div>
   );
