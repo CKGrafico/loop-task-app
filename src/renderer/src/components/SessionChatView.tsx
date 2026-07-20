@@ -3,12 +3,13 @@ import { useIntl } from "react-intl";
 import { cid, useInject } from "inversify-hooks";
 import type { ChatTurn, AccessMode, ApprovalDecision, ToolCall, ChainEditProposalStatus, ChainEditOperationSummary, LoopProposalStatus, SharedTaskWarning } from "../chat/types";
 import type { AgentStreamEvent, ReasoningEffort, ReachabilityState } from "../../../shared/ipc";
-import type { IAgentService, IMcpService, ITranscriptService } from "../services/interfaces";
+import type { IAgentService, IMcpService, ITranscriptService, IConfigService, IInfraService } from "../services/interfaces";
 import type { LoopMeta, Environment, LoopWithOrigin, FleetLoopRollup } from "../types";
 import { useTranscript } from "../chat/useTranscript";
 import { diagnoseFailure } from "../chat/diagnoseFailure";
 import { ChatComposer } from "../chat/ChatComposer";
 import { LoopSummaryBar, type LoopSegmentKind } from "./LoopSummaryBar";
+import { usePipelineCounts } from "./usePipelineCounts";
 import { LoopCard } from "./LoopCard";
 import { LoopProposalCard } from "./LoopProposalCard";
 import { ChainEditProposalCard } from "./ChainEditProposalCard";
@@ -122,13 +123,17 @@ interface SessionChatViewProps {
   fleetRollup?: FleetLoopRollup;
   /** All loops with origin metadata, for fleet-mode segment-click handling. */
   fleetLoopsWithOrigin?: LoopWithOrigin[];
+  /** The project ID for the session's home project, used for pipeline label counts. */
+  projectId?: string;
 }
 
-export function SessionChatView({ sessionId, environmentId, environmentName, activeRuntime, model, reasoningEffort, environments, reachability, loops, perEnvLoops, instance, isEphemeral = false, onPersistSession, turnCount, onTurnSent, autoPersistedJustNow, onDeclineAutoPersist, onUnpersistSession, fleetMode, fleetRollup, fleetLoopsWithOrigin }: SessionChatViewProps): React.ReactNode {
+export function SessionChatView({ sessionId, environmentId, environmentName, activeRuntime, model, reasoningEffort, environments, reachability, loops, perEnvLoops, instance, isEphemeral = false, onPersistSession, turnCount, onTurnSent, autoPersistedJustNow, onDeclineAutoPersist, onUnpersistSession, fleetMode, fleetRollup, fleetLoopsWithOrigin, projectId }: SessionChatViewProps): React.ReactNode {
   const intl = useIntl();
   const [agentService] = useInject<IAgentService>(cid.IAgentService);
   const [mcpService] = useInject<IMcpService>(cid.IMcpService);
   const [transcriptService] = useInject<ITranscriptService>(cid.ITranscriptService);
+  const [configService] = useInject<IConfigService>(cid.IConfigService);
+  const [infraService] = useInject<IInfraService>(cid.IInfraService);
   const {
     turns,
     rows,
@@ -156,6 +161,27 @@ export function SessionChatView({ sessionId, environmentId, environmentName, act
   const [chainVersion, setChainVersion] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const initialEnvRef = useRef<string | null>(null);
+
+  // ── Pipeline labels + counts for the loop summary bar ──────────────────
+  const [pipelineLabels, setPipelineLabels] = useState<string[]>([]);
+  const pipelineCounts = usePipelineCounts(
+    fleetMode ? undefined : environmentId,
+    pipelineLabels,
+    reachability,
+  );
+
+  // Load pipeline labels when the project changes
+  useEffect(() => {
+    if (!projectId || fleetMode) {
+      setPipelineLabels([]);
+      return;
+    }
+    let cancelled = false;
+    void configService.getProjectPipelineLabels(projectId).then((labels) => {
+      if (!cancelled) setPipelineLabels(labels);
+    });
+    return () => { cancelled = true; };
+  }, [projectId, fleetMode, configService]);
 
   // ── Auto-persist notice ──────────────────────────────────────────────
   const [showAutoPersistNotice, setShowAutoPersistNotice] = useState(false);
@@ -494,6 +520,73 @@ export function SessionChatView({ sessionId, environmentId, environmentName, act
 
   const handleSegmentClick = useCallback(
     (kind: LoopSegmentKind) => {
+      // ── Pipeline segment click: fetch and display matching issues ──
+      if (kind.startsWith("pipeline:")) {
+        const label = kind.slice("pipeline:".length);
+        if (!label) return;
+
+        // Create a synthetic turn to hold the issue list
+        const timestamp = Date.now();
+        const turnId = `pipeline-turn-${timestamp}`;
+        const userMsgId = `pipeline-msg-${timestamp}-u`;
+        const assistantMsgId = `pipeline-msg-${timestamp}-a`;
+
+        const turn: ChatTurn = {
+          id: turnId,
+          userMessage: {
+            id: userMsgId,
+            role: "user",
+            content: intl.formatMessage({ id: "loopSummary.pipelineQuery" }, { label }),
+            startedAt: timestamp,
+            environmentId,
+          },
+          assistantMessage: {
+            id: assistantMsgId,
+            role: "assistant",
+            content: "",
+            toolCalls: [],
+            startedAt: timestamp + 1,
+            finishedAt: undefined,
+            environmentId,
+          },
+          finished: false,
+          collapsed: false,
+          accessMode,
+        };
+
+        addTurn(turn);
+        setActiveTurnId(turnId);
+
+        void infraService.executeAction({
+          action: "list-issues",
+          params: { labels: label, state: "open" },
+        }).then((result) => {
+          let content: string;
+          if (result.ok && result.data) {
+            const listResult = result.data as import("../../../shared/ipc").ListIssuesResult;
+            const lines = listResult.issues.map((issue) =>
+              `- #${issue.number} ${issue.title}`,
+            );
+            const header = intl.formatMessage(
+              { id: "loopSummary.pipelineIssueStack" },
+              { count: listResult.total, label },
+            );
+            content = listResult.truncated
+              ? `${header}\n${lines.join("\n")}\n${intl.formatMessage({ id: "issues.stackTruncated" }, { shown: listResult.issues.length, total: listResult.total })}`
+              : `${header}\n${lines.join("\n")}`;
+          } else {
+            content = intl.formatMessage(
+              { id: "issues.listFailed" },
+              { detail: typeof result.error === "string" ? result.error : intl.formatMessage({ id: "infra.unknownError" }) },
+            );
+          }
+          appendAssistantContent(turnId, content);
+          finishTurn(turnId);
+          setActiveTurnId(null);
+        });
+        return;
+      }
+
       // ── Fleet mode: match across all reachable instances ──
       if (fleetMode && fleetLoopsWithOrigin) {
         const matching = kind === "healthy"
@@ -566,7 +659,7 @@ export function SessionChatView({ sessionId, environmentId, environmentName, act
         }
       }
     },
-    [fleetMode, fleetLoopsWithOrigin, loops, environmentId, insertLoopCards, diagnoseAndInsert, environments],
+    [fleetMode, fleetLoopsWithOrigin, loops, environmentId, insertLoopCards, diagnoseAndInsert, environments, infraService, intl, accessMode, addTurn, appendAssistantContent, finishTurn],
   );
 
   // ── Loop proposal callbacks ───────────────────────────────────────────
@@ -662,7 +755,7 @@ export function SessionChatView({ sessionId, environmentId, environmentName, act
           )}
         </div>
       ) : null}
-      <LoopSummaryBar loops={loops} reachability={reachability} onSegmentClick={handleSegmentClick} fleetMode={fleetMode} fleetRollup={fleetRollup} />
+      <LoopSummaryBar loops={loops} reachability={reachability} onSegmentClick={handleSegmentClick} fleetMode={fleetMode} fleetRollup={fleetRollup} pipelineCounts={pipelineCounts} />
       {showAutoPersistNotice ? (
         <div className="auto-persist-notice">
           <span className="auto-persist-notice-text">

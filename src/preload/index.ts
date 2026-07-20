@@ -99,6 +99,10 @@ const bridge: LoopTaskBridge = {
       ipcRenderer.invoke("config:getProjectPickupLabels", projectId) as Promise<string[]>,
     setProjectPickupLabels: (projectId: string, labels: string[]) =>
       ipcRenderer.invoke("config:setProjectPickupLabels", projectId, labels) as Promise<void>,
+    getProjectPipelineLabels: (projectId: string) =>
+      ipcRenderer.invoke("config:getProjectPipelineLabels", projectId) as Promise<string[]>,
+    setProjectPipelineLabels: (projectId: string, labels: string[]) =>
+      ipcRenderer.invoke("config:setProjectPipelineLabels", projectId, labels) as Promise<void>,
     getChatSessions: () =>
       ipcRenderer.invoke("config:getChatSessions") as Promise<ChatSession[]>,
     addChatSession: (session: Omit<ChatSession, "id" | "createdAt">) =>

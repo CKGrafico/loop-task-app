@@ -70,6 +70,8 @@ export interface IConfigService {
   getMainVmId(): Promise<string | null>;
   getProjectPickupLabels(projectId: string): Promise<string[]>;
   setProjectPickupLabels(projectId: string, labels: string[]): Promise<void>;
+  getProjectPipelineLabels(projectId: string): Promise<string[]>;
+  setProjectPipelineLabels(projectId: string, labels: string[]): Promise<void>;
   getChatSessions(): Promise<ChatSession[]>;
   addChatSession(session: Omit<ChatSession, "id" | "createdAt">): Promise<ChatSession>;
   removeChatSession(sessionId: string): Promise<void>;

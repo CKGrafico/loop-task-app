@@ -405,6 +405,28 @@ const validators: Record<string, Validator> = {
     return issues;
   },
 
+  "config:getProjectPipelineLabels": (args) => {
+    const issues: string[] = [];
+    if (!isNonEmptyString(args[0])) issues.push("projectId must be a non-empty string");
+    return issues;
+  },
+
+  "config:setProjectPipelineLabels": (args) => {
+    const issues: string[] = [];
+    if (!isNonEmptyString(args[0])) issues.push("projectId must be a non-empty string");
+    if (!Array.isArray(args[1])) {
+      issues.push("labels must be an array");
+    } else {
+      for (let i = 0; i < args[1].length; i++) {
+        if (!isString(args[1][i])) {
+          issues.push(`labels[${i}] must be a string`);
+          break;
+        }
+      }
+    }
+    return issues;
+  },
+
   "config:getChatSessions": () => [],
 
   "config:addChatSession": (args) => {

@@ -2,23 +2,27 @@ import React, { useMemo } from "react";
 import { useIntl } from "react-intl";
 import type { LoopMeta, LoopStatus, FleetLoopRollup } from "../types";
 import { useNextRunCountdown } from "./useNextRunCountdown";
+import type { PipelineCounts } from "./usePipelineCounts";
 
 /** A segment that can be clicked in the summary bar.
  *  "healthy" covers running + waiting loops.
- *  Individual exception statuses (failed, paused, stopped, finished) are their own segments. */
-export type LoopSegmentKind = "healthy" | "failed" | "paused" | "stopped" | "finished";
+ *  Individual exception statuses (failed, paused, stopped, finished) are their own segments.
+ *  Pipeline labels are their own segment kind. */
+export type LoopSegmentKind = "healthy" | "failed" | "paused" | "stopped" | "finished" | `pipeline:${string}`;
 
 interface LoopSummaryBarProps {
   /** Loops scoped to the session's home project x instance. */
   loops: LoopMeta[];
   /** Whether the instance is reachable. When not connected, the bar shows a muted unknown state. */
   reachability?: "connected" | "reconnecting" | "unreachable";
-  /** Called when the user clicks a bar segment. The handler should summon matching loop cards. */
+  /** Called when the user clicks a bar segment. The handler should summon matching loop cards or issue stacks. */
   onSegmentClick?: (kind: LoopSegmentKind) => void;
   /** When true, the bar renders fleet-wide aggregated totals instead of per-scope counts. */
   fleetMode?: boolean;
   /** Fleet rollup data. Required when fleetMode is true. */
   fleetRollup?: FleetLoopRollup;
+  /** Pipeline label counts for the session's project. Null when no pipeline labels are configured. */
+  pipelineCounts?: PipelineCounts | null;
 }
 
 /** Healthy statuses that collapse to a single count. */
@@ -37,7 +41,7 @@ const EXCEPTION_COLORS: Record<string, string> = {
   finished: "var(--status-finished)",
 };
 
-export function LoopSummaryBar({ loops, reachability, onSegmentClick, fleetMode, fleetRollup }: LoopSummaryBarProps): React.ReactNode {
+export function LoopSummaryBar({ loops, reachability, onSegmentClick, fleetMode, fleetRollup, pipelineCounts }: LoopSummaryBarProps): React.ReactNode {
   const intl = useIntl();
 
   const isReachable = reachability === "connected" || reachability === undefined;
@@ -158,6 +162,31 @@ export function LoopSummaryBar({ loops, reachability, onSegmentClick, fleetMode,
             )}
           </span>
         ))}
+
+        {/* Pipeline segments: shown when pipeline counts are available */}
+        {pipelineCounts ? (
+          <>
+            <span className="loop-summary-divider" />
+            {Object.entries(pipelineCounts).map(([label, count]) => (
+              <span
+                key={`pipeline-${label}`}
+                className="loop-summary-segment loop-summary-pipeline loop-summary-segment--clickable"
+                role="button"
+                tabIndex={0}
+                aria-label={intl.formatMessage(
+                  { id: "loopSummary.pipelineCountAria" },
+                  { count: count < 0 ? 0 : count, label },
+                )}
+                onClick={onSegmentClick ? () => onSegmentClick(`pipeline:${label}` as LoopSegmentKind) : undefined}
+                onKeyDown={onSegmentClick ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSegmentClick(`pipeline:${label}` as LoopSegmentKind); } } : undefined}
+              >
+                {count < 0
+                  ? intl.formatMessage({ id: "loopSummary.pipelineCountError" }, { label })
+                  : intl.formatMessage({ id: "loopSummary.pipelineCount" }, { count, label })}
+              </span>
+            ))}
+          </>
+        ) : null}
       </div>
 
       {/* Next-run countdown (right-aligned, hidden when nothing scheduled) */}

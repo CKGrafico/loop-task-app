@@ -1345,6 +1345,33 @@ input {
   background: var(--bg-active);
 }
 
+/* ── Pipeline segments in the loop summary bar ── */
+
+.loop-summary-divider {
+  display: inline-block;
+  width: 1px;
+  height: 12px;
+  background: var(--border-subtle);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+.loop-summary-pipeline {
+  color: var(--text-muted);
+  font-weight: 400;
+  font-size: 11px;
+}
+
+.loop-summary-pipeline::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 2px;
+  background: var(--accent-blue);
+  opacity: 0.6;
+}
+
 /* ── Loop card (compact live card in the chat stream) ────────────── */
 
 .loop-card {

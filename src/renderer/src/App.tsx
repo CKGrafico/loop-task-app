@@ -1241,6 +1241,7 @@ function AppInner(): React.ReactNode {
             fleetMode={isUnhomed}
             fleetRollup={fleetRollup}
             fleetLoopsWithOrigin={fleetRollup?.loopsWithOrigin}
+            projectId={sessionProject?.id}
           />
         );
       }
