@@ -25,7 +25,11 @@ and because main-process fetch works identically for daemons on remote hosts.
 
 The app is **read-only in v1** for direct loop editing: it observes loop-task state
 and performs triage actions via the inbox (pause, resume, trigger, dismiss). Loop
-creation, editing, and deletion are not yet implemented.
+creation is handled through the chat: when the agent (via MCP tools) proposes a
+new loop, a proposal card appears in the chat stream for user approval. On
+approval, the loop is created via `POST /api/loops`. If the command invokes an
+agent runtime and no max-runs is set, the proposal includes a suggested cap.
+Loop editing and deletion are not yet implemented.
 
 ## 1. Project Structure
 
@@ -75,6 +79,7 @@ orbion/
 │               ├── LoopsView.tsx         # Loop list for the selected instance
 │               ├── LoopDetail.tsx        # Single-loop metadata + logs
 │               ├── LoopCard.tsx          # Compact live card for one loop rendered in the chat stream (status dot, name, meta row, log tail, action buttons: pause/resume/stop/trigger with confirmation)
+│               ├── LoopProposalCard.tsx  # Proposal card for chat-driven loop creation (command, interval, project, max-runs suggestion for agent commands, approve/reject)
 │               ├── LogViewer.tsx         # Tail + live SSE log follow
 │               ├── TasksView.tsx         # Task definitions list
 │               └── ProjectsView.tsx      # Projects list
@@ -140,6 +145,15 @@ flowchart LR
   action buttons (Pause, Resume, Stop, Run Now) that call the daemon's mutation
   endpoints directly via `apiRequest`; destructive actions show an inline
   confirmation overlay before executing.
+- The chat transcript rows include a `loop-proposal` kind that renders a
+  `<LoopProposalCard>` component. When the agent (via MCP tools) proposes creating
+  a loop, a proposal card appears in the stream showing command, interval, project,
+  and options (run-immediately toggle, max-runs input). If the proposed command
+  invokes an agent runtime (`opencode`, `claude-code`, `claude`, `codex`) and no
+  max-runs is set, the card shows a suggested cap badge. On approval, Orbion calls
+  `POST /api/loops` on the session's home instance and inserts a live `LoopCard`
+  row. On rejection, nothing is created. Proposal state is persisted as special
+  transcript messages (id starting with `loop-proposal-`) so it survives reloads.
 - **Inputs:** data from `api.ts`; persisted instances from `store.ts` via IPC.
 - **Outputs:** IPC calls via `window.api`.
 
@@ -379,7 +393,7 @@ keys, writes them into electron-store, and clears the keys. The renderer's
 
 - **Method:** `fetch` from the main process. Base URL is user-provided per
   instance (e.g. `http://127.0.0.1:8845`).
-- **Endpoints consumed:** `GET /api/loops`, `GET /api/loops/:id`,
+- **Endpoints consumed:** `GET /api/loops`, `POST /api/loops`, `GET /api/loops/:id`,
   `GET /api/projects`, `GET /api/tasks`, `GET /api/loops/:id/logs?tail=N`,
   `GET /api/loops/:id/logs/stream` (SSE).
 - **Issues integration:** the `list-issues` and `edit-issue` infra actions
@@ -557,14 +571,14 @@ and screenshots without a daemon. This is a notable gap (see §15).
 - **No lint tooling** configured.
 - **Silent error handling** in a few spots (bounds save, clipboard, JSON parse)
   trades observability for resilience.
-- **Read-only** — mutation actions are not yet implemented.
+- **Read-only except loop creation** — mutation actions beyond proposal-driven creation are not yet implemented.
 - **No packaging config** — there is no shippable installer setup yet.
 
 ## 16. Future Considerations
 
 - **Documented (README):** configurable daemon bind address to drop the SSH
   tunnel step; feeding `/api/events` server-side to replace polling; adding
-  mutation actions (pause/resume/trigger/edit).
+  additional mutation actions (edit, delete loops via proposal flow).
 - **Recommended (not yet planned):** generate `types.ts` from the daemon's
   `openapi.json`; add a test suite + CI; add lint config; add electron-builder
   packaging for distributable installers.
