@@ -969,6 +969,74 @@ function AppInner(): React.ReactNode {
     void configService.getChatSessions().then((s) => setSessions(s));
   }, [sessions, environments, configService, transcriptService, agentService, mcpService, intl]);
 
+  /** Move a chat session to a different project (re-files it in the sidebar). */
+  const handleMoveSessionToProject = useCallback((sessionId: string, targetProjectName: string): void => {
+    const session = sessions.find((s) => s.id === sessionId);
+    if (!session) return;
+
+    // Check if the current instance has the target project
+    const currentEnvProjects = perEnvProjects[session.environmentId] ?? [];
+    const currentInstanceHasProject = currentEnvProjects.some((p) => p.name === targetProjectName);
+
+    if (currentInstanceHasProject) {
+      // Simple case: just update the project name, keep the same instance
+      void configService.updateChatSession(sessionId, {
+        projectName: targetProjectName,
+      });
+    } else {
+      // Need to find an instance that has the target project
+      const targetEnv = environments.find((env) => {
+        const envProjects = perEnvProjects[env.id] ?? [];
+        return envProjects.some((p) => p.name === targetProjectName);
+      });
+
+      if (!targetEnv) {
+        // No instance has this project — show error toast
+        showToast({
+          message: intl.formatMessage(
+            { id: "sidebar.moveToProjectUnavailable" },
+            { project: targetProjectName },
+          ),
+        });
+        return;
+      }
+
+      // Derive working directory from the target project's loops on the new instance
+      const targetEnvLoops = perEnvLoops[targetEnv.id] ?? [];
+      const targetEnvProjects = perEnvProjects[targetEnv.id] ?? [];
+      const targetProject = targetEnvProjects.find((p) => p.name === targetProjectName);
+      const projectLoops = targetProject
+        ? targetEnvLoops.filter((l) => (l.projectId ?? "default") === targetProject.id)
+        : [];
+      const newWorkingDirectory = projectLoops.length > 0
+        ? projectLoops[0].cwd
+        : `~/${targetProjectName}`;
+
+      void configService.updateChatSession(sessionId, {
+        projectName: targetProjectName,
+        environmentId: targetEnv.id,
+        workingDirectory: newWorkingDirectory,
+      });
+
+      // If the moved session is the active one, update the active env selection
+      if (sessionId === activeSessionId) {
+        select(targetEnv.id);
+      }
+    }
+
+    // Refresh sessions in local state
+    void configService.getChatSessions().then((s) => setSessions(s));
+
+    // Show confirmation toast
+    showToast({
+      message: intl.formatMessage(
+        { id: "sidebar.sessionMoved" },
+        { project: targetProjectName },
+      ),
+      duration: 3000,
+    });
+  }, [sessions, environments, perEnvProjects, perEnvLoops, configService, intl, showToast, activeSessionId, select]);
+
   /** Persist an ephemeral (scratch) session so it appears in the sidebar. */
   const handlePersistSession = useCallback((sessionId: string): void => {
     void configService.updateChatSession(sessionId, { persisted: true });
@@ -1521,6 +1589,7 @@ function AppInner(): React.ReactNode {
                         });
                     }
                   }, [sessions, configService, select, environments])}
+                  onMoveSessionToProject={handleMoveSessionToProject}
                 />
               </aside>
             ) : null}

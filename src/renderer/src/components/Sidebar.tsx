@@ -139,19 +139,29 @@ export function Sidebar(props: {
   onOpenProjectChat?: (projectName: string, environmentId: string, workingDirectory: string) => void;
   /** Chat sessions — passed from parent so sidebar stays in sync with persist/unpersist changes. */
   sessions?: ChatSession[];
+  /** Move a chat session to a different project (re-files it in the sidebar). */
+  onMoveSessionToProject?: (sessionId: string, targetProjectName: string) => void;
 }): React.ReactNode {
   const {
     environments, selectedId, health, connectionStatus,
     perEnvLoops, perEnvProjects, view, onNavigate,
     onSelect, onAddVm, fleetActivityEnabled, inboxItemCount,
     onNavigateToLoop, onNavigateToProject, onNavigateToInbox,
-    reachability, mainVmId,     onNavigateToSession, activeSessionId, onOpenProjectChat, sessions: propSessions,
+    reachability, mainVmId,     onNavigateToSession, activeSessionId, onOpenProjectChat, sessions: propSessions, onMoveSessionToProject,
   } = props;
   const intl = useIntl();
   const [configService] = useInject<IConfigService>(cid.IConfigService);
 
   // Text search filter
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Context menu for moving sessions between projects
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    sessionId: string;
+    currentProjectName: string;
+  } | null>(null);
 
   // Track which project nodes are expanded — persisted across restarts
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
@@ -167,6 +177,21 @@ export function Sidebar(props: {
       }
     });
   }, [configService]);
+
+  // Close context menu on click outside or Escape
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleClick = (): void => setContextMenu(null);
+    const handleKey = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") setContextMenu(null);
+    };
+    document.addEventListener("click", handleClick);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("click", handleClick);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [contextMenu]);
 
   // Chat sessions — prefer prop sessions (stays in sync with persist/unpersist),
   // fall back to loading from config store
@@ -498,6 +523,16 @@ export function Sidebar(props: {
                           onClick={() => {
                             onNavigateToSession?.(session.id);
                           }}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setContextMenu({
+                              x: e.clientX,
+                              y: e.clientY,
+                              sessionId: session.id,
+                              currentProjectName: node.projectName,
+                            });
+                          }}
                           title={session.title}
                         >
                           <span className="tree-chevron placeholder"><ChevronRight size={10} /></span>
@@ -636,6 +671,44 @@ export function Sidebar(props: {
         <OrbionMark size={24} />
         <span>{intl.formatMessage({ id: "sidebar.orbion" })}</span>
       </div>
+
+      {/* Context menu for moving sessions between projects */}
+      {contextMenu ? (() => {
+        // Build the list of target projects (all projects except the session's current one)
+        const targetProjects = projectNodes
+          .map((n) => n.projectName)
+          .filter((name) => name !== contextMenu.currentProjectName);
+
+        return (
+          <div
+            className="sidebar-context-menu"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sidebar-context-menu-header">
+              {intl.formatMessage({ id: "sidebar.moveToProject" })}
+            </div>
+            {targetProjects.length === 0 ? (
+              <div className="sidebar-context-menu-item sidebar-context-menu-item-disabled">
+                —
+              </div>
+            ) : (
+              targetProjects.map((projectName) => (
+                <div
+                  key={projectName}
+                  className="sidebar-context-menu-item"
+                  onClick={() => {
+                    onMoveSessionToProject?.(contextMenu.sessionId, projectName);
+                    setContextMenu(null);
+                  }}
+                >
+                  {projectName}
+                </div>
+              ))
+            )}
+          </div>
+        );
+      })() : null}
     </div>
   );
 }
