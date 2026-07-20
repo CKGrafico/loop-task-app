@@ -197,7 +197,7 @@ export interface ConfigBridge {
   getChatSessions: () => Promise<ChatSession[]>;
   addChatSession: (session: Omit<ChatSession, "id" | "createdAt">) => Promise<ChatSession>;
   removeChatSession: (sessionId: string) => Promise<void>;
-  updateChatSession: (sessionId: string, updates: Partial<Pick<ChatSession, "title" | "lastActiveAt" | "environmentId" | "workingDirectory" | "activeRuntime" | "activeModel" | "reasoningEffort">>) => Promise<void>;
+  updateChatSession: (sessionId: string, updates: Partial<Pick<ChatSession, "title" | "lastActiveAt" | "environmentId" | "workingDirectory" | "activeRuntime" | "activeModel" | "reasoningEffort" | "persisted">>) => Promise<void>;
   getExpandedProjects: () => Promise<string[]>;
   setExpandedProjects: (expandedKeys: string[]) => Promise<void>;
   exportBootstrapSeed: () => Promise<BootstrapSeedExportResult>;
@@ -759,7 +759,10 @@ export interface ConditionWatchBridge {
 
 // ── Chat sessions ────────────────────────────────────────────────────
 
-/** A persisted chat session, filed under a project in the sidebar. */
+/** A chat session, optionally filed under a project in the sidebar.
+ *  New sessions are ephemeral by default (persisted = false) and shown with
+ *  an "unsaved" marker. Setting persisted = true makes the session a durable
+ *  sidebar entry and hides the marker. */
 export interface ChatSession {
   id: string;
   title: string;
@@ -775,6 +778,9 @@ export interface ChatSession {
   activeModel?: string;
   /** The reasoning effort level for this session. Undefined means use model default. */
   reasoningEffort?: ReasoningEffort;
+  /** Whether this session is persisted in the sidebar. False = ephemeral (scratch) chat.
+   *  Ephemeral chats are fully functional but not listed in the sidebar until persisted. */
+  persisted?: boolean;
   /** ISO timestamp of last activity in this session. */
   lastActiveAt: string;
   /** ISO timestamp when the session was created. */

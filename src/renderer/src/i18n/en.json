@@ -697,7 +697,9 @@
     "emptyDescription": "Start a conversation with the agent. Ask about loops, tasks, or anything related to your project.",
     "userInitials": "You",
     "viewTitle": "Chat Session",
-    "viewDescription": "Start a conversation with the agent by typing below."
+    "viewDescription": "Start a conversation with the agent by typing below.",
+    "ephemeralMarker": "scratch — won't be kept",
+    "persistAction": "Keep this chat"
   },
   "modelSelector": {
     "selectModel": "Select model",

@@ -3,7 +3,7 @@ import { useIntl } from "react-intl";
 import type { AccessMode, ApprovalDecision, ApprovalRequest, ChatTurn, QuestionRequest } from "./types";
 import { ApprovalPanel } from "./ApprovalPanel";
 import { QuestionPanel } from "./QuestionPanel";
-import { Square, ArrowUp } from "lucide-react";
+import { Square, ArrowUp, Bookmark } from "lucide-react";
 
 interface ChatComposerProps {
   turns: ChatTurn[];
@@ -17,6 +17,10 @@ interface ChatComposerProps {
   drafts: Record<string, string>;
   onDraftChange: (turnId: string | null, text: string) => void;
   isReachable?: boolean;
+  /** Whether this session is ephemeral (scratch) — shows the "won't be kept" marker. */
+  isEphemeral?: boolean;
+  /** Callback to persist (save) an ephemeral session. */
+  onPersistSession?: () => void;
 }
 
 export function ChatComposer({
@@ -31,6 +35,8 @@ export function ChatComposer({
   drafts,
   onDraftChange,
   isReachable = true,
+  isEphemeral = false,
+  onPersistSession,
 }: ChatComposerProps) {
   const intl = useIntl();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -111,6 +117,21 @@ export function ChatComposer({
       )}
 
       <div className="composer-input-area">
+        {isEphemeral ? (
+          <div className="composer-ephemeral-row">
+            <span className="composer-ephemeral-marker">
+              {intl.formatMessage({ id: "session.ephemeralMarker" })}
+            </span>
+            <button
+              className="composer-persist-btn"
+              title={intl.formatMessage({ id: "session.persistAction" })}
+              onClick={onPersistSession}
+            >
+              <Bookmark size={11} />
+              {intl.formatMessage({ id: "session.persistAction" })}
+            </button>
+          </div>
+        ) : null}
         <div className="composer-row">
           <div className="composer-access-mode">
             <button

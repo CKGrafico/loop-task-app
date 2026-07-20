@@ -2705,6 +2705,12 @@ input {
   font-size: 10.5px;
 }
 
+.chip-ephemeral {
+  background: color-mix(in srgb, var(--text-muted) 15%, transparent);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 .mono {
   font-family: var(--font-mono);
 }
@@ -4263,6 +4269,45 @@ input {
   align-items: center;
   gap: 6px;
 }
+
+/* ── Ephemeral (scratch) session marker ──────────────────────────── */
+
+.composer-ephemeral-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.composer-ephemeral-marker {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--text-muted);
+  opacity: 0.7;
+  letter-spacing: 0.02em;
+}
+
+.composer-persist-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 2px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+
+.composer-persist-btn:hover {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+/* ── Access mode chips ───────────────────────────────────────────── */
 
 .composer-access-mode {
   display: flex;
