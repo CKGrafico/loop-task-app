@@ -165,6 +165,8 @@ export interface IInboxService {
   getDismissedIds(): Promise<string[]>;
   dismissItem(itemId: string): Promise<void>;
   buildItems(params: InboxBuildParams): InboxItem[];
+  /** Get the child items for a digest (the individual PR items hidden inside it). */
+  getChildItems(digestItem: InboxItem, params: InboxBuildParams): InboxItem[];
   queryFleet(question: string, params: InboxBuildParams): InboxQueryResult;
   /** Persist a resolved item to the Done archive. */
   resolveItem(resolved: ResolvedInboxItem): Promise<void>;

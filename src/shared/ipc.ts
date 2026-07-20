@@ -664,6 +664,18 @@ export type InboxAction =
   | "dismiss"
   | "open-in-chat";
 
+/** Breakdown of digest child items by verdict risk bucket. */
+export interface DigestCounts {
+  /** PRs with low risk verdict ("safe"). */
+  safe: number;
+  /** PRs with medium or high risk verdict ("needs you"). */
+  needsYou: number;
+  /** PRs with uncertain verdict or no verdict yet ("conflict"). */
+  conflict: number;
+  /** Total number of child items in the digest. */
+  total: number;
+}
+
 export interface InboxItem {
   id: string;
   kind: InboxItemKind;
@@ -697,6 +709,10 @@ export interface InboxItem {
   prUrl?: string;
   /** Agent risk verdict for pr-awaiting-review items. */
   prVerdict?: PrVerdict;
+  /** IDs of child items bundled inside this digest. Only set when kind === "digest". */
+  childItemIds?: string[];
+  /** Pre-computed verdict counts for digest items. Only set when kind === "digest". */
+  digestCounts?: DigestCounts;
 }
 
 export type InboxItemResolutionReason =

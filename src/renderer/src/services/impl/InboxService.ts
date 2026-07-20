@@ -1,6 +1,6 @@
 import { injectable } from "inversify-hooks";
 import type { IInboxService, InboxBuildParams, IApiService, IConfigService } from "../interfaces";
-import type { InboxItem, InboxAction, InboxQueryResult, ResolvedInboxItem, InboxItemResolutionReason, ApiResponse } from "../../../../shared/ipc";
+import type { InboxItem, InboxAction, InboxQueryResult, ResolvedInboxItem, InboxItemResolutionReason, ApiResponse, DigestCounts } from "../../../../shared/ipc";
 import { kindToNotificationType } from "../../../../shared/ipc";
 import { cid, container } from "inversify-hooks";
 import { loopStatusToFleetItem } from "../../fleet-mapping";
@@ -40,6 +40,99 @@ function formatDuration(ms: number): string {
   return remHours > 0 ? `${days}d ${remHours}h` : `${days}d`;
 }
 
+/** Minimum number of PR items to trigger digest grouping. */
+const DIGEST_MIN_PRS = 2;
+
+/**
+ * Group pr-awaiting-review items into a digest when there are 2+ of them.
+ * Individual PR items that belong to a digest are replaced by a single digest
+ * item. When there is only 1 PR, it remains as an individual item.
+ *
+ * The digest summarises verdict counts in three buckets:
+ * - safe: low risk
+ * - needs you: medium or high risk
+ * - conflict: uncertain or no verdict yet
+ */
+function groupPrsIntoDigest(
+  items: InboxItem[],
+  dismissedIds: Set<string>,
+  mainVmEnvironmentId: string | null,
+  mainVmEnvironmentName: string,
+): InboxItem[] {
+  const prItems = items.filter((i) => i.kind === "pr-awaiting-review");
+  const nonPrItems = items.filter((i) => i.kind !== "pr-awaiting-review");
+
+  // If fewer than 2 PR items, don't create a digest
+  if (prItems.length < DIGEST_MIN_PRS) {
+    return items;
+  }
+
+  // Compute verdict counts
+  let safe = 0;
+  let needsYou = 0;
+  let conflict = 0;
+
+  for (const pr of prItems) {
+    const risk = pr.prVerdict?.riskLevel;
+    if (risk === "low") {
+      safe++;
+    } else if (risk === "medium" || risk === "high") {
+      needsYou++;
+    } else {
+      // uncertain or no verdict
+      conflict++;
+    }
+  }
+
+  const digestCounts: DigestCounts = {
+    safe,
+    needsYou,
+    conflict,
+    total: prItems.length,
+  };
+
+  // Build digest title: "10 PRs overnight: 7 safe, 2 need you, 1 conflict"
+  const parts: string[] = [];
+  if (safe > 0) parts.push(`${safe} safe`);
+  if (needsYou > 0) parts.push(`${needsYou} need${needsYou === 1 ? "s" : ""} you`);
+  if (conflict > 0) parts.push(`${conflict} conflict${conflict === 1 ? "" : "s"}`);
+
+  const digestTitle = `${prItems.length} PR${prItems.length !== 1 ? "s" : ""} overnight: ${parts.join(", ")}`;
+  const childItemIds = prItems.map((p) => p.id);
+
+  // Use the most recent occurredAt from the child items
+  const latestOccurredAt = prItems.reduce((latest, p) => {
+    const t = new Date(p.occurredAt).getTime();
+    return t > latest ? t : latest;
+  }, 0);
+
+  const digestItem: InboxItem = {
+    id: `digest:pr-awaiting-review:${mainVmEnvironmentId ?? "unknown"}`,
+    kind: "digest",
+    notificationType: kindToNotificationType("digest"),
+    environmentId: mainVmEnvironmentId ?? "",
+    environmentName: mainVmEnvironmentName,
+    title: digestTitle,
+    detail: undefined,
+    occurredAt: new Date(latestOccurredAt).toISOString(),
+    dismissed: false,
+    availableActions: getAvailableActions("digest"),
+    childItemIds,
+    digestCounts,
+  };
+
+  // If the digest itself is dismissed, don't show it
+  if (dismissedIds.has(digestItem.id)) {
+    // Still hide individual PR items that belong to the dismissed digest
+    const visiblePrIds = new Set(childItemIds);
+    const remainingPrs = prItems.filter((p) => !dismissedIds.has(p.id) && !visiblePrIds.has(p.id));
+    return [...nonPrItems, ...remainingPrs];
+  }
+
+  // Return non-PR items + the digest item (individual PRs are hidden inside the digest)
+  return [...nonPrItems, digestItem];
+}
+
 /**
  * Determine the available inline actions for an inbox item based on its kind
  * and the loop's current status.
@@ -67,13 +160,15 @@ function getAvailableActions(kind: InboxItem["kind"], _loopStatus?: LoopStatus):
       return ["open-in-chat"];
     case "pr-awaiting-review":
       return ["dismiss", "open-in-chat"];
+    case "digest":
+      return ["dismiss", "open-in-chat"];
     default:
       return ["dismiss"];
   }
 }
 
 /**
- * Build inbox items from live fleet data.
+ * Build inbox items from live fleet data (ungrouped — before digest grouping).
  *
  * Items are derived (not persisted): they are computed on every call from
  * perEnvLoops, breaches, and health status. The only persisted state is
@@ -85,7 +180,7 @@ function getAvailableActions(kind: InboxItem["kind"], _loopStatus?: LoopStatus):
  * clears the entry from escalatedOutages). Short outages under the
  * threshold (~10 min) never create an inbox item.
  */
-function deriveItems(params: InboxBuildParams): InboxItem[] {
+function deriveItemsUngrouped(params: InboxBuildParams): InboxItem[] {
   const { perEnvLoops, perEnvHealth, environments, breaches, dismissedIds, escalatedOutages, prAwaitingReview, mainVmEnvironmentId, mainVmEnvironmentName, prVerdicts } = params;
   const items: InboxItem[] = [];
 
@@ -233,6 +328,15 @@ function deriveItems(params: InboxBuildParams): InboxItem[] {
   // Sort by occurredAt descending
   items.sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
   return items;
+}
+
+/**
+ * Build inbox items from live fleet data, with digest grouping applied.
+ */
+function deriveItems(params: InboxBuildParams): InboxItem[] {
+  const items = deriveItemsUngrouped(params);
+  const { dismissedIds, mainVmEnvironmentId, mainVmEnvironmentName } = params;
+  return groupPrsIntoDigest(items, dismissedIds, mainVmEnvironmentId, mainVmEnvironmentName);
 }
 
 /**
@@ -418,10 +522,39 @@ function answerFleetQuery(
     q.includes("review");
 
   if (isPrQuery) {
+    // Show digest summary if a PR digest exists, otherwise individual PR items
+    const digestItems = items.filter((i) => i.kind === "digest" && i.childItemIds && i.childItemIds.length > 0);
     const prItems = items.filter((i) => i.kind === "pr-awaiting-review");
-    if (prItems.length === 0) {
+
+    if (digestItems.length === 0 && prItems.length === 0) {
       return { answer: "No PRs awaiting your review right now.", references: [] };
     }
+
+    if (digestItems.length > 0) {
+      const lines: string[] = [];
+      for (const digest of digestItems) {
+        references.push(digest);
+        const counts = digest.digestCounts;
+        const countParts: string[] = [];
+        if (counts) {
+          if (counts.safe > 0) countParts.push(`${counts.safe} safe`);
+          if (counts.needsYou > 0) countParts.push(`${counts.needsYou} need you`);
+          if (counts.conflict > 0) countParts.push(`${counts.conflict} conflict${counts.conflict !== 1 ? "s" : ""}`);
+        }
+        lines.push(`**${digest.title}**\n`);
+        // Reference the child PRs too
+        for (const childId of digest.childItemIds ?? []) {
+          const child = prItems.find((p) => p.id === childId);
+          if (child) {
+            references.push(child);
+            const link = `[${child.title}](inbox://${child.id})`;
+            lines.push(`- ${link}${child.detail ? ` (${child.detail})` : ""}`);
+          }
+        }
+      }
+      return { answer: lines.join("\n"), references };
+    }
+
     const lines: string[] = [`**${prItems.length} PR${prItems.length !== 1 ? "s" : ""} awaiting your review:**\n`];
     for (const item of prItems.slice(0, 10)) {
       references.push(item);
@@ -498,6 +631,15 @@ export class InboxService implements IInboxService {
 
   buildItems(params: InboxBuildParams): InboxItem[] {
     return deriveItems(params);
+  }
+
+  getChildItems(digestItem: InboxItem, params: InboxBuildParams): InboxItem[] {
+    if (digestItem.kind !== "digest" || !digestItem.childItemIds) return [];
+
+    // Re-derive the ungrouped PR items (before grouping)
+    const allItems = deriveItemsUngrouped(params);
+    const childIds = new Set(digestItem.childItemIds);
+    return allItems.filter((i) => childIds.has(i.id));
   }
 
   queryFleet(question: string, params: InboxBuildParams): InboxQueryResult {

@@ -468,6 +468,38 @@ function AppInner(): React.ReactNode {
     };
   }, [prPollingService, prVerdictService]);
 
+  // Fire a single OS notification when a new PR digest appears
+  const prevDigestIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const digestItems = inboxService.buildItems(inboxBuildParams).filter((i) => i.kind === "digest");
+    const currentIds = new Set(digestItems.map((d) => d.id));
+
+    // Find newly appeared digests
+    for (const digest of digestItems) {
+      if (!prevDigestIdsRef.current.has(digest.id)) {
+        // New digest — fire a single OS notification
+        const counts = digest.digestCounts;
+        if (!globalMuted && counts) {
+          void notificationService.send({
+            title: standaloneIntl.formatMessage(
+              { id: "inbox.digest.notifTitle" },
+              { count: counts.total },
+            ),
+            body: standaloneIntl.formatMessage(
+              { id: "inbox.digest.notifBody" },
+              { safe: counts.safe, needsYou: counts.needsYou, conflict: counts.conflict },
+            ),
+            tag: digest.id,
+            deepLink: { kind: "inbox-item", environmentId: digest.environmentId, itemKind: "digest", itemId: digest.id },
+            suppressIfFocused: true,
+          });
+        }
+      }
+    }
+
+    prevDigestIdsRef.current = currentIds;
+  }, [inboxBuildParams, inboxService, notificationService, globalMuted]);
+
   const selected: Environment | null = environments.find((e) => e.id === selectedId) ?? null;
 
   useEffect(() => {

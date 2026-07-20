@@ -22,6 +22,7 @@ import { gh142BulkRelabelScenario } from "./scenarios/gh-142-bulk-relabel.js";
 import { gh146FleetShapedLoopsScenario } from "./scenarios/gh-146-fleet-shaped-loops.js";
 import { gh147SiblingStructuralOffersScenario } from "./scenarios/gh-147-sibling-structural-offers.js";
 import { gh149AgentRiskVerdictScenario } from "./scenarios/gh-149-agent-risk-verdict.js";
+import { gh150OvernightPrDigestScenario } from "./scenarios/gh-150-overnight-pr-digest.js";
 
 export interface ScenarioContext {
   readonly repoRoot: string;
@@ -100,4 +101,10 @@ registerScenario({
   changeId: "gh-149-agent-risk-verdict",
   runner: gh149AgentRiskVerdictScenario,
   description: "Agent risk verdict on each PR inbox item",
+});
+
+registerScenario({
+  changeId: "gh-150-overnight-pr-digest",
+  runner: gh150OvernightPrDigestScenario,
+  description: "Overnight digest notification grouping PR batches by verdict",
 });
