@@ -4,6 +4,7 @@ import { TOOL_DEFINITIONS } from "../shared/tool-definitions.js";
 import { compareSemver } from "../shared/utils.js";
 import { buildSshArgs } from "./ssh-config.js";
 import { msg } from "./i18n.js";
+import { NODE_RESOLVE_SCRIPT } from "./ssh-scripts.js";
 import {
   VERIFIED_INSTALL_FN,
   MISE_INSTALL,
@@ -26,28 +27,7 @@ function sshExec(host: SshHost, command: string, timeout = 30_000): Promise<{ st
 
 const NODE_PROBE_SCRIPT = `
 set -e
-
-# Try PATH node first
-node_path=""
-if command -v node >/dev/null 2>&1; then
-  node_path="$(command -v node)"
-fi
-
-# Check version managers
-for manager_dir in \
-  "\${HOME}/.nvm/versions/node" \
-  "\${HOME}/.local/share/fnm/node-versions" \
-  "\${HOME}/.asdf/installs/nodejs" \
-  "\${HOME}/.local/share/mise/installs/node" \
-  "\${HOME}/.volta/tools/node"; do
-  if [ -d "\${manager_dir}" ]; then
-    latest="\$(find "\${manager_dir}" -maxdepth 4 -name 'node' -path '*/bin/node' 2>/dev/null | sort -V | tail -1)"
-    if [ -n "\${latest}" ]; then
-      node_path="\${latest}"
-      break
-    fi
-  fi
-done
+${NODE_RESOLVE_SCRIPT}
 
 if [ -z "\${node_path}" ]; then
   echo "NODE_NOT_FOUND"
