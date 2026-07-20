@@ -32,6 +32,7 @@ import { gh151ReviewModeFromNotificationScenario } from "./scenarios/gh-151-revi
 import { gh152ReviewQueueStripScenario } from "./scenarios/gh-152-review-queue-strip.js";
 import { gh153DiffViewReviewModeScenario } from "./scenarios/gh-153-diff-view-review-mode.js";
 import { gh154AgentBriefingDefaultScenario } from "./scenarios/gh-154-agent-briefing-default.js";
+import { gh155ReviewActionsScenario } from "./scenarios/gh-155-review-actions.js";
 
 export interface ScenarioContext {
   readonly repoRoot: string;
@@ -173,6 +174,44 @@ registerScenario({
         description: "Report success or failure for every issue after one approval.",
         assertionDescriptions: ["Applying once reports a result for every issue including partial failure"],
         captureLabels: ["result"],
+      },
+    ],
+  },
+});
+
+registerScenario({
+  changeId: "gh-155-approve-request-changes-open-web",
+  runner: gh155ReviewActionsScenario,
+  description: "Approve or request changes in review mode and open the PR on the web",
+  evidenceContract: {
+    criteria: [
+      {
+        id: "review-actions",
+        description: "Supported review actions are available in review mode.",
+        assertionDescriptions: [
+          "Review mode exposes Approve, Request changes, and Open on web actions",
+        ],
+        captureLabels: ["review-actions"],
+      },
+      {
+        id: "request-changes",
+        description: "Request changes accepts a comment and resolves the PR item.",
+        assertionDescriptions: [
+          "Request changes requires a comment and marks the PR reviewed",
+        ],
+        captureLabels: ["request-changes"],
+      },
+      {
+        id: "approve",
+        description: "Approve resolves a queued PR item.",
+        assertionDescriptions: ["Approve marks another queued PR reviewed"],
+        captureLabels: ["approved"],
+      },
+      {
+        id: "open-on-web",
+        description: "Open on web launches the selected PR URL.",
+        assertionDescriptions: ["Open on web launches the selected pull request URL"],
+        captureLabels: ["review-actions"],
       },
     ],
   },
