@@ -14,6 +14,8 @@ interface LoopCardProps {
   reachability?: "connected" | "reconnecting" | "unreachable";
   /** The environment-instance that hosts this loop. When provided, the card shows a log tail and action buttons. */
   instance?: Environment;
+  /** The scroll container element for IntersectionObserver rooting (enables auto-collapse when scrolled past). */
+  scrollContainerRef?: React.RefObject<HTMLElement | null>;
 }
 
 /** Pulse animation for running status dots. */
@@ -120,7 +122,7 @@ function confirmDescriptionKey(action: LoopAction): string {
   }
 }
 
-export function LoopCard({ loop, reachability, instance }: LoopCardProps): React.ReactNode {
+export function LoopCard({ loop, reachability, instance, scrollContainerRef }: LoopCardProps): React.ReactNode {
   const intl = useIntl();
 
   const isReachable = reachability === "connected" || reachability === undefined;
@@ -151,6 +153,18 @@ export function LoopCard({ loop, reachability, instance }: LoopCardProps): React
   const dotColor = isReachable
     ? (STATUS_COLORS[loop.status] ?? "var(--text-secondary)")
     : "var(--status-unknown)";
+
+  // Status label (shared between expanded header and collapsed one-liner)
+  const statusLabel = isReachable
+    ? intl.formatMessage({ id: `loopCard.status${loop.status.charAt(0).toUpperCase()}${loop.status.slice(1)}` })
+    : intl.formatMessage({ id: "loopCard.statusUnknown" });
+
+  // ── Click-to-expand for collapsed cards ────────────────────────────────
+  const handleCollapsedClick = useCallback((): void => {
+    setIsScrolledPast(false);
+    // Scroll the card into view (centered) so it stays visible after expanding
+    cardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, []);
 
   // ── Action state ─────────────────────────────────────────────────────
   const [confirmingAction, setConfirmingAction] = useState<LoopAction | null>(null);
@@ -237,6 +251,8 @@ export function LoopCard({ loop, reachability, instance }: LoopCardProps): React
 
   // Track whether the card is in the viewport
   const [isVisible, setIsVisible] = useState(true);
+  // Track whether the card has scrolled above the viewport (for auto-collapse)
+  const [isScrolledPast, setIsScrolledPast] = useState(false);
   const cardRef = useRef<HTMLDivElement | null>(null);
 
   // Ref for the log content div (autoscroll target)
@@ -245,21 +261,39 @@ export function LoopCard({ loop, reachability, instance }: LoopCardProps): React
   // Track whether user has scrolled up (disable autoscroll)
   const autoScrollRef = useRef(true);
 
-  // ── IntersectionObserver for visibility gating ────────────────────────
+  // ── IntersectionObserver for visibility + collapse gating ────────────
+  // When a scrollContainerRef is provided, we root the observer to the
+  // scroll container so we can detect when the card scrolls above the
+  // viewport (scrolled past → collapsed). Cards that are merely below the
+  // fold are not collapsed so they appear expanded when the user scrolls down.
   useEffect(() => {
     const el = cardRef.current;
     if (!el) return;
 
+    const rootEl = scrollContainerRef?.current ?? null;
+
     const observer = new IntersectionObserver(
       ([entry]) => {
         setIsVisible(entry.isIntersecting);
+
+        if (rootEl && !entry.isIntersecting) {
+          // Card is out of view. Determine direction: if the card's bottom
+          // edge is above the root's top edge, it was scrolled past (above).
+          const rootBounds = entry.rootBounds;
+          if (rootBounds) {
+            const scrolledAbove = entry.boundingClientRect.bottom < rootBounds.top;
+            setIsScrolledPast(scrolledAbove);
+          }
+        } else if (entry.isIntersecting) {
+          setIsScrolledPast(false);
+        }
       },
-      { threshold: 0 },
+      { root: rootEl, threshold: 0 },
     );
 
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [scrollContainerRef]);
 
   // ── Initial tail fetch ────────────────────────────────────────────────
   useEffect(() => {
@@ -369,6 +403,7 @@ export function LoopCard({ loop, reachability, instance }: LoopCardProps): React
     "loop-card",
     failed ? "loop-card--failed" : "",
     !isReachable ? "loop-card--unreachable" : "",
+    isScrolledPast ? "loop-card--collapsed" : "",
   ].filter(Boolean).join(" ");
 
   // Whether to render the log tail section
@@ -379,138 +414,158 @@ export function LoopCard({ loop, reachability, instance }: LoopCardProps): React
 
   return (
     <div className={cardCls} ref={cardRef}>
-      {/* Header row: status dot + name */}
-      <div className="loop-card-header">
-        <span
-          className={`dot loop-card-dot${isPulsing ? " loop-card-dot--pulse" : ""}`}
-          style={{ background: dotColor }}
-        />
-        <span className="loop-card-name">{name}</span>
-        <span
-          className="loop-card-status-chip"
-          style={{ color: isReachable ? STATUS_COLORS[loop.status] : "var(--status-unknown)" }}
+      {isScrolledPast ? (
+        /* ── Collapsed one-liner: status dot + name + status ── */
+        <div className="loop-card-header" onClick={handleCollapsedClick} role="button" tabIndex={0}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleCollapsedClick(); }}
         >
-          {isReachable
-            ? intl.formatMessage({ id: `loopCard.status${loop.status.charAt(0).toUpperCase()}${loop.status.slice(1)}` })
-            : intl.formatMessage({ id: "loopCard.statusUnknown" })}
-        </span>
-      </div>
-
-      {/* Meta row: interval · runs · last exit · next run */}
-      <div className="loop-card-meta">
-        <span className="loop-card-meta-item">
-          <span className="loop-card-meta-label">{intl.formatMessage({ id: "loopCard.interval" })}</span>
-          <span className="loop-card-meta-value">{loop.intervalHuman}</span>
-        </span>
-        <span className="loop-card-meta-sep" />
-        <span className="loop-card-meta-item">
-          <span className="loop-card-meta-label">{intl.formatMessage({ id: "loopCard.runs" })}</span>
-          <span className="loop-card-meta-value loop-card-meta-value--mono">{runCountLabel}</span>
-        </span>
-        <span className="loop-card-meta-sep" />
-        <span className="loop-card-meta-item">
-          <span className="loop-card-meta-label">{intl.formatMessage({ id: "loopCard.lastExit" })}</span>
           <span
-            className={`loop-card-meta-value loop-card-meta-value--mono${failed ? " loop-card-meta-value--exit-fail" : ""}`}
+            className={`dot loop-card-dot${isPulsing ? " loop-card-dot--pulse" : ""}`}
+            style={{ background: dotColor }}
+          />
+          <span className="loop-card-name">{name}</span>
+          <span className="loop-card-collapsed-sep">{"\u2014"}</span>
+          <span
+            className="loop-card-status-chip"
+            style={{ color: isReachable ? STATUS_COLORS[loop.status] : "var(--status-unknown)" }}
           >
-            {exitCodeLabel}
+            {statusLabel}
           </span>
-        </span>
-        <span className="loop-card-meta-sep" />
-        <span className="loop-card-meta-item">
-          <span className="loop-card-meta-label">{intl.formatMessage({ id: "loopCard.nextRun" })}</span>
-          <span className="loop-card-meta-value loop-card-meta-value--mono">{isRunning ? intl.formatMessage({ id: "loopCard.runningNow" }) : nextRunLabel}</span>
-        </span>
-      </div>
-
-      {/* Log tail: compact monospace output with copy affordance */}
-      {showLogTail && (
-        <div className="loop-card-log-tail">
-          <div className="loop-card-log-tail-header">
-            <span className="loop-card-log-tail-label">
-              {intl.formatMessage({ id: "loopCard.outputLabel" })}
-              {streamState === "connected" && (
-                <span className="loop-card-log-live-dot" title={intl.formatMessage({ id: "loopCard.live" })} />
-              )}
-              {streamState === "connected" && (
-                <span className="loop-card-log-live-label">{intl.formatMessage({ id: "loopCard.live" })}</span>
-              )}
-            </span>
-            <button className="loop-card-log-tail-copy" onClick={() => void copyLogs()}>
-              {copied
-                ? intl.formatMessage({ id: "loopCard.copied" })
-                : intl.formatMessage({ id: "loopCard.copy" })}
-            </button>
-          </div>
-          <div className="loop-card-log-tail-content" ref={logContentRef} onScroll={handleLogScroll}>
-            {logLines.map((line, idx) => {
-              const classified = classifyLogLine(line);
-              const isError = classified.kind === "exit" && (classified.exitCode ?? 0) !== 0;
-              return (
-                <div
-                  key={idx}
-                  className={`loop-card-log-tail-line${isError ? " loop-card-log-tail-line--error" : ""}`}
-                >
-                  {line}
-                </div>
-              );
-            })}
-          </div>
         </div>
-      )}
-
-      {/* Action result feedback */}
-      {actionResult && (
-        <div className={`loop-card-action-result${actionResult.kind === "error" ? " loop-card-action-result--error" : ""}`}>
-          {actionResult.kind === "success"
-            ? intl.formatMessage({ id: actionResultLabel(actionResult.action) })
-            : actionResult.message}
-        </div>
-      )}
-
-      {/* Action buttons */}
-      {showActions && !actionResult && (
-        <div className="loop-card-actions">
-          {availableActions.map((action) => (
-            <button
-              key={action}
-              className={`loop-card-action-btn loop-card-action-btn--${action}`}
-              disabled={actionLoading}
-              onClick={() => handleActionClick(action)}
+      ) : (
+        <>
+          {/* Header row: status dot + name */}
+          <div className="loop-card-header">
+            <span
+              className={`dot loop-card-dot${isPulsing ? " loop-card-dot--pulse" : ""}`}
+              style={{ background: dotColor }}
+            />
+            <span className="loop-card-name">{name}</span>
+            <span
+              className="loop-card-status-chip"
+              style={{ color: isReachable ? STATUS_COLORS[loop.status] : "var(--status-unknown)" }}
             >
-              {intl.formatMessage({ id: actionButtonLabel(action) })}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Confirmation overlay */}
-      {confirmingAction && (
-        <div className="loop-card-confirm-overlay">
-          <div className="loop-card-confirm-content">
-            <div className="loop-card-confirm-title">
-              {intl.formatMessage({ id: confirmTitleKey(confirmingAction) })}
-            </div>
-            <div className="loop-card-confirm-description">
-              {intl.formatMessage({ id: confirmDescriptionKey(confirmingAction) })}
-            </div>
-            <div className="loop-card-confirm-buttons">
-              <button
-                className="loop-card-confirm-btn loop-card-confirm-btn--cancel"
-                onClick={handleConfirmCancel}
-              >
-                {intl.formatMessage({ id: "loopCard.confirmCancel" })}
-              </button>
-              <button
-                className="loop-card-confirm-btn loop-card-confirm-btn--confirm"
-                onClick={handleConfirmExecute}
-                disabled={actionLoading}
-              >
-                {intl.formatMessage({ id: actionButtonLabel(confirmingAction) })}
-              </button>
-            </div>
+              {statusLabel}
+            </span>
           </div>
-        </div>
+
+          {/* Meta row: interval · runs · last exit · next run */}
+          <div className="loop-card-meta">
+            <span className="loop-card-meta-item">
+              <span className="loop-card-meta-label">{intl.formatMessage({ id: "loopCard.interval" })}</span>
+              <span className="loop-card-meta-value">{loop.intervalHuman}</span>
+            </span>
+            <span className="loop-card-meta-sep" />
+            <span className="loop-card-meta-item">
+              <span className="loop-card-meta-label">{intl.formatMessage({ id: "loopCard.runs" })}</span>
+              <span className="loop-card-meta-value loop-card-meta-value--mono">{runCountLabel}</span>
+            </span>
+            <span className="loop-card-meta-sep" />
+            <span className="loop-card-meta-item">
+              <span className="loop-card-meta-label">{intl.formatMessage({ id: "loopCard.lastExit" })}</span>
+              <span
+                className={`loop-card-meta-value loop-card-meta-value--mono${failed ? " loop-card-meta-value--exit-fail" : ""}`}
+              >
+                {exitCodeLabel}
+              </span>
+            </span>
+            <span className="loop-card-meta-sep" />
+            <span className="loop-card-meta-item">
+              <span className="loop-card-meta-label">{intl.formatMessage({ id: "loopCard.nextRun" })}</span>
+              <span className="loop-card-meta-value loop-card-meta-value--mono">{isRunning ? intl.formatMessage({ id: "loopCard.runningNow" }) : nextRunLabel}</span>
+            </span>
+          </div>
+
+          {/* Log tail: compact monospace output with copy affordance */}
+          {showLogTail && (
+            <div className="loop-card-log-tail">
+              <div className="loop-card-log-tail-header">
+                <span className="loop-card-log-tail-label">
+                  {intl.formatMessage({ id: "loopCard.outputLabel" })}
+                  {streamState === "connected" && (
+                    <span className="loop-card-log-live-dot" title={intl.formatMessage({ id: "loopCard.live" })} />
+                  )}
+                  {streamState === "connected" && (
+                    <span className="loop-card-log-live-label">{intl.formatMessage({ id: "loopCard.live" })}</span>
+                  )}
+                </span>
+                <button className="loop-card-log-tail-copy" onClick={() => void copyLogs()}>
+                  {copied
+                    ? intl.formatMessage({ id: "loopCard.copied" })
+                    : intl.formatMessage({ id: "loopCard.copy" })}
+                </button>
+              </div>
+              <div className="loop-card-log-tail-content" ref={logContentRef} onScroll={handleLogScroll}>
+                {logLines.map((line, idx) => {
+                  const classified = classifyLogLine(line);
+                  const isError = classified.kind === "exit" && (classified.exitCode ?? 0) !== 0;
+                  return (
+                    <div
+                      key={idx}
+                      className={`loop-card-log-tail-line${isError ? " loop-card-log-tail-line--error" : ""}`}
+                    >
+                      {line}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Action result feedback */}
+          {actionResult && (
+            <div className={`loop-card-action-result${actionResult.kind === "error" ? " loop-card-action-result--error" : ""}`}>
+              {actionResult.kind === "success"
+                ? intl.formatMessage({ id: actionResultLabel(actionResult.action) })
+                : actionResult.message}
+            </div>
+          )}
+
+          {/* Action buttons */}
+          {showActions && !actionResult && (
+            <div className="loop-card-actions">
+              {availableActions.map((action) => (
+                <button
+                  key={action}
+                  className={`loop-card-action-btn loop-card-action-btn--${action}`}
+                  disabled={actionLoading}
+                  onClick={() => handleActionClick(action)}
+                >
+                  {intl.formatMessage({ id: actionButtonLabel(action) })}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Confirmation overlay */}
+          {confirmingAction && (
+            <div className="loop-card-confirm-overlay">
+              <div className="loop-card-confirm-content">
+                <div className="loop-card-confirm-title">
+                  {intl.formatMessage({ id: confirmTitleKey(confirmingAction) })}
+                </div>
+                <div className="loop-card-confirm-description">
+                  {intl.formatMessage({ id: confirmDescriptionKey(confirmingAction) })}
+                </div>
+                <div className="loop-card-confirm-buttons">
+                  <button
+                    className="loop-card-confirm-btn loop-card-confirm-btn--cancel"
+                    onClick={handleConfirmCancel}
+                  >
+                    {intl.formatMessage({ id: "loopCard.confirmCancel" })}
+                  </button>
+                  <button
+                    className="loop-card-confirm-btn loop-card-confirm-btn--confirm"
+                    onClick={handleConfirmExecute}
+                    disabled={actionLoading}
+                  >
+                    {intl.formatMessage({ id: actionButtonLabel(confirmingAction) })}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
