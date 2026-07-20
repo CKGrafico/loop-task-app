@@ -55,6 +55,7 @@ import { chooseFinalAssets } from "./size-limits.js";
 import { clearEvidenceDir, writeFinalAssets, permanentEvidenceDir } from "./store.js";
 import { writeManifest } from "./manifest.js";
 import { generatePrMarkdown } from "./pr-markdown.js";
+import { installRuntimeDiagnostics } from "./runtime-diagnostics.js";
 
 const EvidenceInputSchema = z.object({
   changeId: z.string().min(1),
@@ -151,6 +152,7 @@ export async function runVisualEvidence(
     }
     videoController = enableVideo(launched.window, temp, config);
     await enableTracing(launched.context, temp);
+    const diagnostics = installRuntimeDiagnostics(launched.window);
 
     const checkpoints: CapturedCheckpoint[] = [];
     const checkpointLabels = new Set<string>();
@@ -203,6 +205,19 @@ export async function runVisualEvidence(
       );
     }
 
+    if (diagnostics.errors.length > 0) {
+      return failedResult(
+        input.changeId,
+        diagnostics.errors.join("\n"),
+        "runtime-diagnostics",
+        {
+          screenshot: temp.failureScreenshot,
+          video: temp.video,
+          trace: temp.trace,
+        },
+      );
+    }
+
     const contractValidation = validateEvidenceContract(
       scenarioDef,
       scenarioResult.assertions,
@@ -226,6 +241,7 @@ export async function runVisualEvidence(
     }
 
     await stopTracing(launched.context, temp);
+    diagnostics.dispose();
     await launched.close();
     launched = null;
 

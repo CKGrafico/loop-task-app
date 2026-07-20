@@ -28,6 +28,7 @@ import { resolveConfig, findRepoRoot } from "./config.js";
 import { writeManifest } from "./manifest.js";
 import { generatePrMarkdown } from "./pr-markdown.js";
 import { clearEvidenceDir } from "./store.js";
+import { evidenceExitCode } from "./exit-code.js";
 import type { RepoCoordinates } from "./types.js";
 
 /** Tracks the changeId currently being processed so the unhandled-rejection
@@ -177,13 +178,13 @@ async function main(): Promise<number> {
   if (result.status === "blocked") {
     clearEvidenceDir(repoRoot, input.changeId, config);
     console.error(`Visual evidence BLOCKED: ${result.reason}`);
-    return 2;
+    return evidenceExitCode(result);
   }
 
   if (result.status === "failed") {
     clearEvidenceDir(repoRoot, input.changeId, config);
     console.error(`Visual evidence FAILED — step "${result.failedStep}": ${result.error}`);
-    return 1;
+    return evidenceExitCode(result);
   }
 
   // passed — re-generate prMarkdown anchored to the head SHA and emit stdout
