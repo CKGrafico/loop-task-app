@@ -40,7 +40,7 @@ orbion/
 │   │   ├── index.ts            # Electron main: window lifecycle, IPC handlers,
 │   │   │                       #   HTTP proxy, SSE client, bounds persistence
 │   │   ├── http-utils.ts       # Shared fetch + envelope unwrapping (fetchAndUnwrap)
-│   │   ├── config-store.ts     # electron-store config + safeStorage wrapper
+│   │   ├── config-store.ts     # electron-store config + safeStorage wrapper + debounced config-home sync
 │   │   ├── credential-vault.ts # Dedicated safeStorage-encrypted credential records
 │   │   ├── sibling-decline-store.ts # Persistent decline memory for sibling structural offers
 │   │   ├── connection-supervisor.ts  # Periodic health probes + SSE reconnect
@@ -92,9 +92,11 @@ orbion/
 │               ├── LoopProposalCard.tsx  # Proposal card for chat-driven loop creation (command, interval, project, max-runs suggestion for agent commands, approve/reject)
 │               ├── ChainEditProposalCard.tsx  # Proposal card for chat-driven chain edits (shared-task warning, fork decision, approve/reject)
 │               ├── SiblingOfferCard.tsx  # Structural change offer card for sibling loops (per-instance approval, decline memory)
+│               ├── PrReferenceCard.tsx    # Compact PR reference card rendered in chat stream (number, title, verdict, risk, link)
 │               ├── LogViewer.tsx         # Tail + live SSE log follow
 │               ├── TasksView.tsx         # Task definitions list
 │               └── ProjectsView.tsx      # Projects list
+│               ├── SettingsPanel.tsx       # Global settings drawer (theme, agent, config-home, mute, ephemeral)
 ├── electron.vite.config.ts     # electron-vite config (main/preload/renderer)
 ├── vite.web.config.ts          # Browser-only renderer dev server (mock mode)
 ├── tsconfig*.json              # Root + node (main/preload) + web (renderer) refs
@@ -171,7 +173,7 @@ flowchart LR
   task chain, a proposal card shows the proposed chain preview, operation summaries,
   and a shared-task warning if the edit affects a task used by other loops. On approval,
   the chain edit is applied via the MCP service.
-- The chat transcript rows include a `sibling-offer` kind that renders a
+  - The chat transcript rows include a `sibling-offer` kind that renders a
   `<SiblingOfferCard>` component. After a structural chain edit is applied, Orbion
   identifies sibling loops on other reachable instances that share the same chain
   topology (same cached LoopShape) and offers the same structural change per sibling.
@@ -179,6 +181,14 @@ flowchart LR
   (command text, command arguments, prompt wording) never trigger sibling offers.
   Declined offers are persisted in `sibling-decline-store.ts` (electron-store, 90-day
   retention) so the same structural offer is not shown again.
+- The chat transcript rows include a `pr-reference-card` kind that renders a
+  `<PrReferenceCard>` component. When the user clicks "Open in chat" on a PR inbox
+  item or "Discuss in chat" in review mode, Orbion creates/opens a chat session
+  scoped to the PR's project/instance and inserts a compact reference card showing
+  the PR number, title, verdict, risk level, author, and a clickable link. The
+  agent can then answer questions about the PR and take review actions from the
+  conversation. PR reference cards are persisted as system messages with `pr-ref-`
+  ID prefixes, enabling transcript reload to reconstruct them.
 - **Inputs:** data from `api.ts`; persisted instances from `store.ts` via IPC.
 - **Outputs:** IPC calls via `window.api`.
 
@@ -217,7 +227,14 @@ There is no separate server; the **Electron main process is the backend**
   writing, callers compare their last-known stamp against the file's current
   stamp; if stale (config changed on another machine), a warning dialog
   offers pull-remote or overwrite-anyway. Last-write-wins remains the model;
-  this is a guardrail, not a merge system.
+   this is a guardrail, not a merge system.
+   On every stamp bump, a **debounced config-sync writer** (2s) writes the
+   sanitized config to `~/.orbion/config.json` on the designated config-home
+   VM. For SSH endpoints, the write pipes JSON via stdin to `mkdir -p ~/.orbion
+   && cat > ~/.orbion/config.json && chmod 600 ~/.orbion/config.json`. For
+   direct endpoints, the write uses Node.js `fs.writeFileSync` with mode
+   `0o600`. The sync is fire-and-forget with console logging on failure; the
+   next mutation triggers a retry. Loop-task is not involved.
 - **SSH onboarding** (`vm-wizard.ts`, `ssh-probe.ts`, `ssh-launch.ts`, `runtime-adapter.ts`) — after
   SSH authentication, probes Node.js, the `loop-task` command, and daemon state.
   Node.js 20 or newer is required. A missing loop-task command produces an
@@ -235,6 +252,13 @@ There is no separate server; the **Electron main process is the backend**
   system browser via `setWindowOpenHandler`.
 - **Window-bounds persistence** — debounced save of size/position/maximized
   state to `window-bounds.json` in the Electron `userData` dir.
+- **Global settings** — a deliberately thin settings surface for app-wide
+  preferences (theme, default agent runtime, config-home VM, notification mute,
+  ephemeral chat threshold). Persisted in `electron-store` under the
+  `globalSettings` key alongside environments and sessions. Exposed to the
+  renderer via a `settings` sub-bridge (`settings:get`, `settings:update`
+  IPC channels). The settings panel is a right-side drawer opened from a gear
+  icon in the sidebar footer; it contains no instance-specific options.
 
 IPC handlers registered on `app.whenReady`: `api:request`, `stream:subscribe`,
 `stream:unsubscribe`, `config:getInstances`, `config:addInstance`,
@@ -245,11 +269,11 @@ IPC handlers registered on `app.whenReady`: `api:request`, `stream:subscribe`,
 `budget:updateWatch`, `budget:getBreaches`, `budget:addBreach`,
 `budget:dismissBreach`, `inbox:getItems`, `inbox:dismissItem`,
 `inbox:queryFleet`, `inbox:resolveItem`, `inbox:getResolvedItems`,
-`inbox:pruneResolvedItems`, `reachability:getStatus`, `reachability:getAll`, `transcript:getMessages`, `transcript:appendMessage`, `transcript:appendMessages`, `transcript:updateMessage`, `transcript:deleteSession`, `agent:sendPrompt`, `agent:interrupt`, `config:getConfigStamp`, `config:stampCheckedSetMainVm`, `config:forceSetMainVm`, `siblingDecline:isDeclined`, `siblingDecline:recordDecline`. The `agent:sendPrompt` handler initiates a streaming agent response via the OpenCode runtime (promptAsync + SSE events), while `agent:streamEvent` is a push channel that forwards streaming events (text-delta, tool-call-start, tool-call-output, turn-finished, turn-error, turn-interrupted) to the renderer. The `agent:interrupt` handler aborts an in-flight generation, preserving partial output. The `config:getConfigStamp`, `config:stampCheckedSetMainVm`, and `config:forceSetMainVm` handlers implement versioned config writes with stale-overwrite detection: the stamp-checked variant compares the caller's last-known stamp against the on-disk stamp and returns a conflict result on mismatch, while the force variant writes regardless of staleness (last-write-wins with explicit consent). The inbox service also performs inline
-actions (`run-now`, `pause`, `resume`, `restart`, `dismiss`, `open-in-chat`)
-via its `executeInboxAction` method, which calls the same loop-task API
-endpoints as the loop card (`POST /api/loops/:id/trigger`,
-`POST /api/loops/:id/pause`, `POST /api/loops/:id/resume`, `POST /api/loops/:id/stop`). The `infra:executeAction` handler supports
+  `inbox:pruneResolvedItems`, `reachability:getStatus`, `reachability:getAll`, `transcript:getMessages`, `transcript:appendMessage`, `transcript:appendMessages`, `transcript:updateMessage`, `transcript:deleteSession`, `agent:sendPrompt`, `agent:interrupt`, `config:getConfigStamp`, `config:stampCheckedSetMainVm`, `config:forceSetMainVm`, `siblingDecline:isDeclined`, `siblingDecline:recordDecline`, `settings:get`, `settings:update`. The `agent:sendPrompt` handler initiates a streaming agent response via the OpenCode runtime (promptAsync + SSE events), while `agent:streamEvent` is a push channel that forwards streaming events (text-delta, tool-call-start, tool-call-output, turn-finished, turn-error, turn-interrupted) to the renderer. The `agent:interrupt` handler aborts an in-flight generation, preserving partial output. The `config:getConfigStamp`, `config:stampCheckedSetMainVm`, and `config:forceSetMainVm` handlers implement versioned config writes with stale-overwrite detection: the stamp-checked variant compares the caller's last-known stamp against the on-disk stamp and returns a conflict result on mismatch, while the force variant writes regardless of staleness (last-write-wins with explicit consent). The inbox service also performs inline
+  actions (`run-now`, `pause`, `resume`, `restart`, `dismiss`, `open-in-chat`)
+  via its `executeInboxAction` method, which calls the same loop-task API
+  endpoints as the loop card (`POST /api/loops/:id/trigger`,
+  `POST /api/loops/:id/pause`, `POST /api/loops/:id/resume`, `POST /api/loops/:id/stop`). The `open-in-chat` action for `pr-awaiting-review` items creates a chat session with a PR reference card inserted, providing conversational context for PR discussion. The `infra:executeAction` handler supports
 actions: `machine-status`, `clone-repo`, `create-issue`,
 `detect-platform`, `list-issues`, `add-label`, `edit-issue`.
 

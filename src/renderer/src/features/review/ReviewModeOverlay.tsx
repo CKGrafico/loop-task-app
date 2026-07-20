@@ -3,7 +3,7 @@ import { useIntl } from "react-intl";
 import { cid, useInject } from "inversify-hooks";
 import type { IReviewModeService } from "../../services/interfaces";
 import type { ReviewModeItem, PrRiskLevel, BatchOverlapResult } from "../../../../shared/ipc";
-import { GitPullRequest, X, ExternalLink, CheckCircle2, MessageCircleWarning, Loader2, AlertTriangle } from "lucide-react";
+import { GitPullRequest, X, ExternalLink, CheckCircle2, MessageCircleWarning, Loader2, AlertTriangle, MessageSquare } from "lucide-react";
 import { ReviewQueueStrip } from "./ReviewQueueStrip";
 import { ReviewDiffView } from "./ReviewDiffView";
 import { ReviewBriefingView } from "./ReviewBriefingView";
@@ -20,7 +20,7 @@ function riskChipClass(riskLevel: PrRiskLevel): string {
 
 type ReviewTab = "briefing" | "raw-diff";
 
-export function ReviewModeOverlay(): React.ReactNode {
+export function ReviewModeOverlay({ onDiscussInChat }: { onDiscussInChat?: (item: ReviewModeItem) => void }): React.ReactNode {
   const [reviewModeService] = useInject<IReviewModeService>(cid.IReviewModeService);
 
   const activeItem = reviewModeService.getActiveItem();
@@ -226,6 +226,16 @@ function ReviewModeContent({
                 <ExternalLink size={12} />
                 <span>{intl.formatMessage({ id: "reviewMode.openOnWeb" })}</span>
               </button>
+              {onDiscussInChat ? (
+                <button
+                  className="review-mode-action-btn review-mode-action-discuss"
+                  title={intl.formatMessage({ id: "reviewMode.discussInChat" })}
+                  onClick={() => onDiscussInChat(item)}
+                >
+                  <MessageSquare size={12} />
+                  <span>{intl.formatMessage({ id: "reviewMode.discussInChat" })}</span>
+                </button>
+              ) : null}
             </div>
             <button
               className="icon-btn review-mode-close"

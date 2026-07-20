@@ -1,7 +1,7 @@
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useIntl } from "react-intl";
 import { cid, useInject } from "inversify-hooks";
-import type { ChatTurn, AccessMode, ApprovalDecision, ToolCall, ChainEditProposalStatus, ChainEditOperationSummary, LoopProposalStatus, SharedTaskWarning, SiblingOfferStatus } from "../chat/types";
+import type { ChatTurn, AccessMode, ApprovalDecision, ToolCall, ChainEditProposalStatus, ChainEditOperationSummary, LoopProposalStatus, SharedTaskWarning, SiblingOfferStatus, FleetPlanStatus, FleetPlanTarget } from "../chat/types";
 import type { AgentStreamEvent, ReasoningEffort, ReachabilityState } from "../../../shared/ipc";
 import type { IAgentService, IMcpService, ITranscriptService, IConfigService, IInfraService, ILoopShapeCacheService, ISiblingOfferService } from "../services/interfaces";
 import type { LoopMeta, Environment, LoopWithOrigin, FleetLoopRollup } from "../types";
@@ -19,7 +19,9 @@ import { LoopProposalCard } from "./LoopProposalCard";
 import { FleetShapedProposalCard } from "./FleetShapedProposalCard";
 import { ChainEditProposalCard } from "./ChainEditProposalCard";
 import { SiblingOfferCard } from "./SiblingOfferCard";
+import { FleetPlanCard } from "./FleetPlanCard";
 import { FailureDiagnosisPanel } from "./FailureDiagnosisPanel";
+import { PrReferenceCard } from "./PrReferenceCard";
 import { WifiOff } from "lucide-react";
 import { fetchLogs } from "../api";
 
@@ -191,6 +193,9 @@ export function SessionChatView({ sessionId, environmentId, environmentName, act
     updateChainEditProposalForkDecision,
     insertSiblingOffer,
     updateSiblingOfferStatus,
+    insertFleetPlan,
+    updateFleetPlanStatus,
+    updateFleetPlanTarget,
   } = useTranscript(sessionId);
 
   const [accessMode, setAccessMode] = useState<AccessMode>("full");
@@ -922,6 +927,105 @@ export function SessionChatView({ sessionId, environmentId, environmentName, act
     [updateSiblingOfferStatus],
   );
 
+  // ── Fleet plan handlers ──────────────────────────────────────────────
+
+  const handleFleetPlanApply = useCallback(
+    (planId: string, checkedTargets: FleetPlanTarget[]) => {
+      // Mark unchecked targets as "skipped", then execute checked ones
+      for (const target of checkedTargets) {
+        updateFleetPlanTarget(planId, target.targetId, { status: "running" });
+      }
+
+      // Execute each checked target sequentially via the existing createLoop API
+      // This is a placeholder execution model; the actual operation varies by intent
+      void (async () => {
+        for (const target of checkedTargets) {
+          try {
+            // Find the environment for this target
+            const env = environments.find((e) => e.id === target.environmentId);
+            const instanceForTarget = env
+              ? { ...instance, id: env.id, name: env.name }
+              : undefined;
+
+            if (!instanceForTarget) {
+              updateFleetPlanTarget(planId, target.targetId, {
+                status: "failed",
+                error: `Instance ${target.environmentName} not found`,
+              });
+              continue;
+            }
+
+            // Use the agent to execute the operation via MCP on the target instance
+            const result = await mcpService.callTool(target.environmentId, "execute_fleet_operation", {
+              description: target.operation,
+              projectId: target.projectId,
+            });
+
+            if (result.ok) {
+              updateFleetPlanTarget(planId, target.targetId, { status: "ok" });
+            } else {
+              const errorMsg = typeof result.error === "string"
+                ? result.error
+                : intl.formatMessage({ id: "fleetPlan.applyToSelected" }, { count: 0 });
+              updateFleetPlanTarget(planId, target.targetId, {
+                status: "failed",
+                error: errorMsg,
+              });
+            }
+          } catch {
+            updateFleetPlanTarget(planId, target.targetId, {
+              status: "failed",
+              error: intl.formatMessage({ id: "fleetPlan.applyToSelected" }, { count: 0 }),
+            });
+          }
+        }
+
+        // Mark the plan as applied after all targets are done
+        updateFleetPlanStatus(planId, "applied");
+      })();
+    },
+    [environments, instance, mcpService, updateFleetPlanTarget, updateFleetPlanStatus, intl],
+  );
+
+  const handleFleetPlanCancel = useCallback(
+    (planId: string) => {
+      // Mark all pending targets as skipped
+      const planRow = rows.find(
+        (r): r is import("../chat/types").FleetPlanRow =>
+          r.kind === "fleet-plan" && r.planId === planId,
+      );
+      if (planRow) {
+        for (const target of planRow.targets) {
+          if (target.status === "pending") {
+            updateFleetPlanTarget(planId, target.targetId, { status: "skipped" });
+          }
+        }
+      }
+    },
+    [rows, updateFleetPlanTarget],
+  );
+
+  const handleFleetPlanStatusChange = useCallback(
+    (planId: string, status: FleetPlanStatus, error?: string) => {
+      updateFleetPlanStatus(planId, status, error ? { error } : undefined);
+    },
+    [updateFleetPlanStatus],
+  );
+
+  const handleFleetPlanTargetCheckedChange = useCallback(
+    (planId: string, targetId: string, checked: boolean) => {
+      updateFleetPlanTarget(planId, targetId, { checked });
+    },
+    [updateFleetPlanTarget],
+  );
+
+  const handleFleetPlanTargetStatusChange = useCallback(
+    (planId: string, targetId: string, status: FleetPlanTargetStatus, error?: string) => {
+      updateFleetPlanTarget(planId, targetId, { status, ...(error ? { error } : {}) });
+    },
+    [updateFleetPlanTarget],
+  );
+
   return (
     <div className="session-chat-panel">
       {!isReachable ? (
@@ -972,6 +1076,7 @@ export function SessionChatView({ sessionId, environmentId, environmentName, act
                 const envName = row.environmentId
                   ? environments.find((e) => e.id === row.environmentId)?.name
                   : undefined;
+                const isAssistantCrossScope = row.environmentId != null && row.environmentId !== environmentId;
                 return (
                   <div key={row.id} className="transcript-assistant-msg">
                     <div className="transcript-avatar session-assistant-avatar">{activeRuntime === "claude" ? "CC" : "OC"}</div>
@@ -980,8 +1085,11 @@ export function SessionChatView({ sessionId, environmentId, environmentName, act
                         <MarkdownContent content={row.content} streaming={row.streaming} />
                       </Suspense>
                       {envName ? (
-                        <span className="transcript-instance-attribution">
-                          {intl.formatMessage({ id: "instanceAttribution.label" }, { instance: envName })}
+                        <span className={`transcript-instance-attribution${isAssistantCrossScope ? " transcript-instance-attribution--cross-scope" : ""}`}>
+                          {isAssistantCrossScope
+                            ? intl.formatMessage({ id: "crossScope.assistantAttribution" }, { instance: envName })
+                            : intl.formatMessage({ id: "instanceAttribution.label" }, { instance: envName })
+                          }
                         </span>
                       ) : null}
                     </div>
@@ -1043,14 +1151,21 @@ export function SessionChatView({ sessionId, environmentId, environmentName, act
                 const originEnv = origin
                   ? environments.find((e) => e.id === origin.environmentId)
                   : undefined;
+                const isLoopCardCrossScope = row.environmentId !== environmentId;
                 return (
                   <div key={row.id} className="transcript-loop-card">
                     {origin ? (
-                      <span className="loop-card-origin-label">
-                        {intl.formatMessage(
-                          { id: "loopCard.originLabel" },
-                          { project: origin.projectName, instance: originEnv?.name ?? origin.environmentName },
-                        )}
+                      <span className={`loop-card-origin-label${isLoopCardCrossScope ? " loop-card-origin-label--cross-scope" : ""}`}>
+                        {isLoopCardCrossScope
+                          ? intl.formatMessage(
+                              { id: "crossScope.loopCardLabel" },
+                              { project: origin.projectName, instance: originEnv?.name ?? origin.environmentName },
+                            )
+                          : intl.formatMessage(
+                              { id: "loopCard.originLabel" },
+                              { project: origin.projectName, instance: originEnv?.name ?? origin.environmentName },
+                            )
+                        }
                       </span>
                     ) : null}
                     <LoopCard loop={loop} reachability={reachability} instance={originEnv ?? instance} scrollContainerRef={scrollRef} chainVersion={chainVersion} />
@@ -1079,6 +1194,7 @@ export function SessionChatView({ sessionId, environmentId, environmentName, act
                       environmentId={environmentId}
                       loopShapeCacheService={loopShapeCacheService}
                       infraService={infraService}
+                      homeEnvironmentId={environmentId}
                     />
                   </div>
                 );
@@ -1093,6 +1209,8 @@ export function SessionChatView({ sessionId, environmentId, environmentName, act
                       onRejected={handleChainEditRejected}
                       onStatusChange={handleChainEditStatusChange}
                       onForkDecision={handleChainEditForkDecision}
+                      homeEnvironmentId={environmentId}
+                      environments={environments}
                     />
                   </div>
                 );
@@ -1106,6 +1224,7 @@ export function SessionChatView({ sessionId, environmentId, environmentName, act
                       onApproved={handleSiblingOfferApproved}
                       onDeclined={handleSiblingOfferDeclined}
                       onStatusChange={handleSiblingOfferStatusChange}
+                      homeEnvironmentId={environmentId}
                     />
                   </div>
                 );
@@ -1114,6 +1233,27 @@ export function SessionChatView({ sessionId, environmentId, environmentName, act
                 return (
                   <div key={row.id} className="transcript-failure-diagnosis">
                     <FailureDiagnosisPanel row={row} />
+                  </div>
+                );
+              }
+              case "pr-reference-card": {
+                return (
+                  <div key={row.id} className="transcript-pr-reference-card">
+                    <PrReferenceCard row={row} />
+                  </div>
+                );
+              }
+              case "fleet-plan": {
+                return (
+                  <div key={row.id} className="transcript-fleet-plan">
+                    <FleetPlanCard
+                      row={row}
+                      onApply={handleFleetPlanApply}
+                      onCancel={handleFleetPlanCancel}
+                      onStatusChange={handleFleetPlanStatusChange}
+                      onTargetCheckedChange={handleFleetPlanTargetCheckedChange}
+                      onTargetStatusChange={handleFleetPlanTargetStatusChange}
+                    />
                   </div>
                 );
               }

@@ -2,6 +2,7 @@ import type { ChainStep } from "../components/TaskChainView";
 import type { SimilarLoopMatch } from "../fleet-similarity";
 import type { ShapeAdaptation } from "../fleet-shape-adapt";
 import type { StructuralDiff, SiblingCandidate, SiblingOfferStatus } from "../../../shared/sibling-offer-types";
+import type { PrVerdict } from "../../../shared/ipc";
 import type { FailureCategory } from "./diagnoseFailure";
 
 export type ToolCallStatus = "running" | "completed" | "error";
@@ -83,7 +84,9 @@ export type RowKind =
   | "loop-proposal"
   | "chain-edit-proposal"
   | "sibling-offer"
-  | "failure-diagnosis";
+  | "failure-diagnosis"
+  | "pr-reference-card"
+  | "fleet-plan";
 
 export interface BaseRow {
   id: string;
@@ -264,6 +267,67 @@ export interface SiblingOfferRow extends BaseRow {
   error: string | null;
 }
 
+/** Execution status of a single target in a fleet plan. */
+export type FleetPlanTargetStatus = "pending" | "running" | "ok" | "failed" | "skipped";
+
+/** Overall status of a fleet plan card. */
+export type FleetPlanStatus = "pending" | "applying" | "applied" | "cancelled";
+
+/** A single resolved target (project x instance) in a fleet plan. */
+export interface FleetPlanTarget {
+  /** Unique ID for this target (e.g. `${environmentId}:${projectId}`). */
+  targetId: string;
+  /** The instance (environment) this target runs on. */
+  environmentId: string;
+  /** Display name for the instance. */
+  environmentName: string;
+  /** Project ID on that instance. */
+  projectId: string;
+  /** Display name for the project. */
+  projectName: string;
+  /** Human-readable description of the concrete operation. */
+  operation: string;
+  /** Whether the target is selected for execution (default: true). */
+  checked: boolean;
+  /** Execution status of this target. */
+  status: FleetPlanTargetStatus;
+  /** Error message when status is "failed". */
+  error: string | null;
+}
+
+/** A plan card for fleet fan-out: per-target checkboxes and a single apply. */
+export interface FleetPlanRow extends BaseRow {
+  kind: "fleet-plan";
+  /** Unique plan identifier for tracking state. */
+  planId: string;
+  /** Human-readable description of the fleet-wide action. */
+  description: string;
+  /** Resolved targets (project x instance) with per-target checkboxes. */
+  targets: FleetPlanTarget[];
+  /** Overall card status. */
+  status: FleetPlanStatus;
+  /** Populated on apply error (card-level). */
+  error: string | null;
+}
+
+/** A compact PR reference card rendered in the chat stream. Provides PR context
+ *  for the agent conversation. Read-only (no inline approve/reject). */
+export interface PrReferenceCardRow extends BaseRow {
+  kind: "pr-reference-card";
+  /** PR number. */
+  prNumber: number;
+  /** PR title. */
+  prTitle: string;
+  /** Repository in "owner/repo" format. */
+  prRepo: string;
+  /** PR author login. */
+  prAuthor: string;
+  /** PR URL (clickable link). */
+  prUrl: string;
+  /** Agent risk verdict (may be undefined while analyzing). */
+  prVerdict?: PrVerdict;
+}
+
 export type TranscriptRow =
   | UserMessageRow
   | AssistantMessageRow
@@ -277,4 +341,6 @@ export type TranscriptRow =
   | LoopProposalRow
   | ChainEditProposalRow
   | SiblingOfferRow
-  | FailureDiagnosisRow;
+  | FailureDiagnosisRow
+  | PrReferenceCardRow
+  | FleetPlanRow;
