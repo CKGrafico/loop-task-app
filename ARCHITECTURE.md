@@ -50,6 +50,7 @@ orbion/
 │   │   ├── platform-classifier.ts  # Git remote URL → platform classification
 │   │   ├── transcript-store.ts # Per-session chat transcript file storage
 │   │   ├── sse-parser.ts     # Spec-compliant SSE stream parser (eventsource-parser)
+│   │   ├── diff-analyzer.ts   # Heuristic PR diff risk analysis (verdict + risk level)
 │   │   └── ssh-probe.ts        # SSH VM, Node 20+, loop-task, and daemon probing
 │   ├── preload/
 │   │   └── index.ts            # contextBridge → window.api (typed IPC surface)
