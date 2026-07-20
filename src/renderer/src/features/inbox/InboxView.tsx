@@ -8,7 +8,7 @@ import type { LoopMeta, EnvironmentHealth, Environment, Project } from "../../ty
 import {
   Inbox, AlertTriangle, CheckCircle2, XCircle, WifiOff,
   Play, Pause, RotateCw, MessageSquare, X, Search, ArrowUp, ChevronRight,
-  Layers, GitPullRequest,
+  ChevronDown, Layers, GitPullRequest,
 } from "lucide-react";
 import { Suspense } from "react";
 import { MarkdownContent } from "../../chat/MarkdownContent";
@@ -312,18 +312,32 @@ export function InboxView({
             {/* Active items list */}
             {items.length > 0 ? (
               <div className="inbox-view-list">
-                {items.map((item) => (
-                  <InboxViewItemRow
-                    key={item.id}
-                    item={item}
-                    projectLookup={projectLookup}
-                    environments={environments}
-                    onClick={onClickItem}
-                    onDismiss={handleDismiss}
-                    onExecuteAction={handleExecuteAction}
-                    onOpenInChat={onOpenInChat}
-                  />
-                ))}
+                {items.map((item) =>
+                  item.kind === "digest" ? (
+                    <DigestViewItemRow
+                      key={item.id}
+                      item={item}
+                      projectLookup={projectLookup}
+                      environments={environments}
+                      buildParams={buildParams}
+                      onClick={onClickItem}
+                      onDismiss={handleDismiss}
+                      onExecuteAction={handleExecuteAction}
+                      onOpenInChat={onOpenInChat}
+                    />
+                  ) : (
+                    <InboxViewItemRow
+                      key={item.id}
+                      item={item}
+                      projectLookup={projectLookup}
+                      environments={environments}
+                      onClick={onClickItem}
+                      onDismiss={handleDismiss}
+                      onExecuteAction={handleExecuteAction}
+                      onOpenInChat={onOpenInChat}
+                    />
+                  ),
+                )}
               </div>
             ) : null}
 
@@ -396,6 +410,150 @@ export function InboxView({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Expandable digest row that shows grouped PR items */
+function DigestViewItemRow({
+  item,
+  projectLookup,
+  environments,
+  buildParams,
+  onClick,
+  onDismiss,
+  onExecuteAction,
+  onOpenInChat,
+}: {
+  item: InboxItem;
+  projectLookup: Map<string, string>;
+  environments: Array<{ id: string; name: string }>;
+  buildParams: InboxBuildParams;
+  onClick: (item: InboxItem) => void;
+  onDismiss: (itemId: string) => void;
+  onExecuteAction: (item: InboxItem, action: InboxAction) => Promise<void>;
+  onOpenInChat: (item: InboxItem) => void;
+}): React.ReactNode {
+  const intl = useIntl();
+  const [inboxService] = useInject<IInboxService>(cid.IInboxService);
+  const [expanded, setExpanded] = useState(false);
+  const [childItems, setChildItems] = useState<InboxItem[]>([]);
+  const [executingAction, setExecutingAction] = useState<InboxAction | null>(null);
+
+  // Load child items when expanded
+  useEffect(() => {
+    if (!expanded) return;
+    const children = inboxService.getChildItems(item, buildParams);
+    setChildItems(children);
+  }, [expanded, inboxService, item, buildParams]);
+
+  const color = kindColor("digest", "digest");
+  const counts = item.digestCounts;
+
+  const handleToggleExpand = useCallback(() => {
+    setExpanded((prev) => !prev);
+  }, []);
+
+  const handleAction = useCallback(async (action: InboxAction, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (executingAction) return;
+
+    if (action === "open-in-chat") {
+      onOpenInChat(item);
+      return;
+    }
+
+    setExecutingAction(action);
+    try {
+      await onExecuteAction(item, action);
+    } finally {
+      setExecutingAction(null);
+    }
+  }, [executingAction, item, onExecuteAction, onOpenInChat]);
+
+  // Build verdict count badges
+  const countBadges: React.ReactNode[] = [];
+  if (counts) {
+    if (counts.safe > 0) {
+      countBadges.push(
+        <span key="safe" className="digest-count-badge digest-count-safe">
+          {counts.safe} {intl.formatMessage({ id: "inbox.digest.safe" })}
+        </span>,
+      );
+    }
+    if (counts.needsYou > 0) {
+      countBadges.push(
+        <span key="needsYou" className="digest-count-badge digest-count-needs-you">
+          {counts.needsYou} {intl.formatMessage({ id: "inbox.digest.needsYou" })}
+        </span>,
+      );
+    }
+    if (counts.conflict > 0) {
+      countBadges.push(
+        <span key="conflict" className="digest-count-badge digest-count-conflict">
+          {counts.conflict} {intl.formatMessage({ id: "inbox.digest.conflict" })}
+        </span>,
+      );
+    }
+  }
+
+  const timestamp = item.occurredAt ? timeAgo(item.occurredAt) : "";
+
+  return (
+    <div className="inbox-view-item digest-view-item">
+      <div className="digest-view-item-header" onClick={handleToggleExpand} role="button" tabIndex={0}>
+        <span className="inbox-view-item-icon" style={{ color }}>
+          <Layers size={16} strokeWidth={1.8} />
+        </span>
+        <div className="inbox-view-item-body">
+          <span className="inbox-view-item-title">{item.title}</span>
+          <div className="digest-count-badges">
+            {countBadges}
+          </div>
+          <span className="inbox-view-item-meta">
+            {item.environmentName}
+            {timestamp ? ` · ${timestamp}` : ""}
+          </span>
+        </div>
+        <div className="inbox-view-item-actions">
+          <button
+            className="icon-btn inbox-item-dismiss"
+            title={intl.formatMessage({ id: "inbox.action.dismiss" })}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDismiss(item.id);
+            }}
+            disabled={executingAction !== null}
+          >
+            <X size={11} />
+          </button>
+        </div>
+        <span className="inbox-view-item-chevron">
+          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </span>
+      </div>
+
+      {/* Expanded child items */}
+      {expanded && childItems.length > 0 ? (
+        <div className="digest-view-children">
+          {childItems.map((child) => (
+            <div key={child.id} className="digest-child-item" onClick={() => onClick(child)} role="button" tabIndex={0}>
+              <span className="inbox-view-item-icon" style={{ color: kindColor("pr-awaiting-review", "watch") }}>
+                <GitPullRequest size={14} strokeWidth={1.8} />
+              </span>
+              <div className="inbox-view-item-body">
+                <span className="inbox-view-item-title">{child.title}</span>
+                {child.kind === "pr-awaiting-review" ? (
+                  <PrVerdictDisplay verdict={child.prVerdict} />
+                ) : null}
+                <span className="inbox-view-item-meta">
+                  {child.detail}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

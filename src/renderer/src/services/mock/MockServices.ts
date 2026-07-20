@@ -888,7 +888,85 @@ export class MockInboxService implements IInboxService {
     }
 
     items.sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
+
+    // Group PRs into a digest when 2+ are present (same logic as real InboxService)
+    const prItems = items.filter((i) => i.kind === "pr-awaiting-review");
+    const nonPrItems = items.filter((i) => i.kind !== "pr-awaiting-review");
+
+    if (prItems.length >= 2) {
+      let safe = 0;
+      let needsYou = 0;
+      let conflict = 0;
+      for (const pr of prItems) {
+        const risk = pr.prVerdict?.riskLevel;
+        if (risk === "low") safe++;
+        else if (risk === "medium" || risk === "high") needsYou++;
+        else conflict++;
+      }
+
+      const parts: string[] = [];
+      if (safe > 0) parts.push(`${safe} safe`);
+      if (needsYou > 0) parts.push(`${needsYou} need${needsYou === 1 ? "s" : ""} you`);
+      if (conflict > 0) parts.push(`${conflict} conflict${conflict === 1 ? "" : "s"}`);
+
+      const digestItem: InboxItem = {
+        id: `digest:pr-awaiting-review:${mainVmEnvironmentId ?? "unknown"}`,
+        kind: "digest",
+        notificationType: kindToNotificationType("digest"),
+        environmentId: mainVmEnvironmentId ?? "",
+        environmentName: mainVmEnvironmentName,
+        title: `${prItems.length} PR${prItems.length !== 1 ? "s" : ""} overnight: ${parts.join(", ")}`,
+        detail: undefined,
+        occurredAt: prItems[0]?.occurredAt ?? new Date().toISOString(),
+        dismissed: false,
+        availableActions: ["dismiss", "open-in-chat"],
+        childItemIds: prItems.map((p) => p.id),
+        digestCounts: { safe, needsYou, conflict, total: prItems.length },
+      };
+
+      if (!mockDismissedIds.has(digestItem.id)) {
+        return [...nonPrItems, digestItem];
+      }
+    }
+
     return items;
+  }
+
+  getChildItems(digestItem: InboxItem, params: InboxBuildParams): InboxItem[] {
+    if (digestItem.kind !== "digest" || !digestItem.childItemIds) return [];
+
+    // Build the ungrouped list and filter to children
+    const allItems: InboxItem[] = [];
+    const { prAwaitingReview, mainVmEnvironmentId, mainVmEnvironmentName, prVerdicts } = params;
+
+    if (mainVmEnvironmentId && prAwaitingReview.length > 0) {
+      for (const pr of prAwaitingReview) {
+        const itemId = `pr-awaiting-review:${pr.repo}:${pr.number}`;
+        if (mockDismissedIds.has(itemId)) continue;
+        const verdictKey = `${pr.repo}:${pr.number}`;
+        const verdict = prVerdicts.get(verdictKey);
+        allItems.push({
+          id: itemId,
+          kind: "pr-awaiting-review",
+          notificationType: kindToNotificationType("pr-awaiting-review"),
+          environmentId: mainVmEnvironmentId,
+          environmentName: mainVmEnvironmentName,
+          title: pr.title,
+          detail: `#${pr.number} in ${pr.repo} by @${pr.author}`,
+          occurredAt: pr.updatedAt,
+          dismissed: false,
+          availableActions: ["dismiss", "open-in-chat"],
+          prNumber: pr.number,
+          prRepo: pr.repo,
+          prAuthor: pr.author,
+          prUrl: pr.url,
+          prVerdict: verdict,
+        });
+      }
+    }
+
+    const childIds = new Set(digestItem.childItemIds);
+    return allItems.filter((i) => childIds.has(i.id));
   }
 
   queryFleet(question: string, params: InboxBuildParams): InboxQueryResult {

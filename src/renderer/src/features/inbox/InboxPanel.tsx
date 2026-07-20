@@ -5,7 +5,7 @@ import type { IInboxService, InboxBuildParams } from "../../services/interfaces"
 import type { InboxItem, InboxAction, InboxQueryResult, OutageEscalation, ResolvedInboxItem, PrAwaitingReviewItem, PrVerdict, PrRiskLevel } from "../../../../shared/ipc";
 import type { BudgetBreach } from "../../../../shared/ipc";
 import type { LoopMeta, EnvironmentHealth, Environment } from "../../types";
-import { ArrowUp, CheckCircle2, Inbox, X, Search, Play, Pause, RotateCw, MessageSquare } from "lucide-react";
+import { ArrowUp, CheckCircle2, Inbox, X, Search, Play, Pause, RotateCw, MessageSquare, ChevronRight, ChevronDown, Layers, GitPullRequest } from "lucide-react";
 import { Suspense } from "react";
 import { MarkdownContent } from "../../chat/MarkdownContent";
 import { timeAgo } from "../../format";
@@ -230,16 +230,28 @@ export function InboxPanel({
             {/* Active items list */}
             {items.length > 0 && queryTurns.length === 0 ? (
               <div className="inbox-items-list">
-                {items.map((item) => (
-                  <InboxItemRow
-                    key={item.id}
-                    item={item}
-                    onClick={onClickItem}
-                    onDismiss={handleDismiss}
-                    onExecuteAction={handleExecuteAction}
-                    onOpenInChat={onOpenInChat}
-                  />
-                ))}
+                {items.map((item) =>
+                  item.kind === "digest" ? (
+                    <DigestItemRowPanel
+                      key={item.id}
+                      item={item}
+                      buildParams={buildParams}
+                      onClick={onClickItem}
+                      onDismiss={handleDismiss}
+                      onExecuteAction={handleExecuteAction}
+                      onOpenInChat={onOpenInChat}
+                    />
+                  ) : (
+                    <InboxItemRow
+                      key={item.id}
+                      item={item}
+                      onClick={onClickItem}
+                      onDismiss={handleDismiss}
+                      onExecuteAction={handleExecuteAction}
+                      onOpenInChat={onOpenInChat}
+                    />
+                  ),
+                )}
               </div>
             ) : null}
 
@@ -311,6 +323,109 @@ export function InboxPanel({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Expandable digest row for the sidebar panel */
+function DigestItemRowPanel({
+  item,
+  buildParams,
+  onClick,
+  onDismiss,
+  onExecuteAction,
+  onOpenInChat,
+}: {
+  item: InboxItem;
+  buildParams: InboxBuildParams;
+  onClick: (item: InboxItem) => void;
+  onDismiss: (itemId: string) => void;
+  onExecuteAction: (item: InboxItem, action: InboxAction) => Promise<void>;
+  onOpenInChat: (item: InboxItem) => void;
+}): React.ReactNode {
+  const intl = useIntl();
+  const [inboxService] = useInject<IInboxService>(cid.IInboxService);
+  const [expanded, setExpanded] = useState(false);
+  const [childItems, setChildItems] = useState<InboxItem[]>([]);
+
+  useEffect(() => {
+    if (!expanded) return;
+    const children = inboxService.getChildItems(item, buildParams);
+    setChildItems(children);
+  }, [expanded, inboxService, item, buildParams]);
+
+  const counts = item.digestCounts;
+
+  // Build verdict count badges
+  const countBadges: React.ReactNode[] = [];
+  if (counts) {
+    if (counts.safe > 0) {
+      countBadges.push(
+        <span key="safe" className="digest-count-badge digest-count-safe">
+          {counts.safe} {intl.formatMessage({ id: "inbox.digest.safe" })}
+        </span>,
+      );
+    }
+    if (counts.needsYou > 0) {
+      countBadges.push(
+        <span key="needsYou" className="digest-count-badge digest-count-needs-you">
+          {counts.needsYou} {intl.formatMessage({ id: "inbox.digest.needsYou" })}
+        </span>,
+      );
+    }
+    if (counts.conflict > 0) {
+      countBadges.push(
+        <span key="conflict" className="digest-count-badge digest-count-conflict">
+          {counts.conflict} {intl.formatMessage({ id: "inbox.digest.conflict" })}
+        </span>,
+      );
+    }
+  }
+
+  return (
+    <div className="inbox-item-row digest-item-row">
+      <div className="digest-item-header" onClick={() => setExpanded((e) => !e)} role="button" tabIndex={0}>
+        <span className="inbox-item-dot inbox-item-dot-info">≡</span>
+        <div className="inbox-item-info">
+          <span className="inbox-item-title">{item.title}</span>
+          <div className="digest-count-badges">
+            {countBadges}
+          </div>
+          <span className="inbox-item-meta">
+            {item.environmentName}
+          </span>
+        </div>
+        <div className="inbox-item-actions">
+          <button
+            className="icon-btn inbox-item-dismiss"
+            title={intl.formatMessage({ id: "inbox.action.dismiss" })}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDismiss(item.id);
+            }}
+          >
+            <X size={11} />
+          </button>
+        </div>
+      </div>
+
+      {/* Expanded child items */}
+      {expanded && childItems.length > 0 ? (
+        <div className="digest-children">
+          {childItems.map((child) => (
+            <div key={child.id} className="digest-child-item" onClick={() => onClick(child)} role="button" tabIndex={0}>
+              <span className="inbox-item-dot inbox-item-dot-warning">!</span>
+              <div className="inbox-item-info">
+                <span className="inbox-item-title">{child.title}</span>
+                {child.kind === "pr-awaiting-review" ? (
+                  <PrVerdictDisplayPanel verdict={child.prVerdict} />
+                ) : null}
+                <span className="inbox-item-meta">{child.detail}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
