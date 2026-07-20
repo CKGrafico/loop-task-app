@@ -393,7 +393,7 @@ export function SessionChatView({ sessionId, environmentId, environmentName, act
                 if (!loop) return null;
                 return (
                   <div key={row.id} className="transcript-loop-card">
-                    <LoopCard loop={loop} reachability={reachability} instance={instance} />
+                    <LoopCard loop={loop} reachability={reachability} instance={instance} scrollContainerRef={scrollRef} />
                   </div>
                 );
               }
