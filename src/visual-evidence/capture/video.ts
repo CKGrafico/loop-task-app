@@ -34,7 +34,7 @@ export function enableVideo(
   return {
     async stop(): Promise<string | null> {
       try {
-        const video = context.video();
+        const video = (context as unknown as { video?: () => { path(): Promise<string> } | null }).video?.();
         if (!video) return null;
         const p = await video.path();
         const dest = paths.video;

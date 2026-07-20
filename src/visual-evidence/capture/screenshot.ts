@@ -37,14 +37,6 @@ export interface OptimizedScreenshot {
 const MIN_QUALITY = 40;
 const MIN_WIDTH = 480;
 
-async function captureRaw(page: import("playwright").Page, opts: ScreenshotOptions): Promise<Buffer> {
-  if (opts.selector) {
-    const locator = page.locator(opts.selector).first();
-    return locator.screenshot({ type: "png" });
-  }
-  return page.screenshot({ type: "png", fullPage: false });
-}
-
 async function optimize(
   raw: Buffer,
   config: VisualEvidenceConfig,

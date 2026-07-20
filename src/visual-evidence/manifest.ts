@@ -42,63 +42,30 @@ function build(
   result: Pick<EvidenceResult, "changeId" | "required" | "status">,
   opts: BuildOptions,
 ): EvidenceManifest {
-  const prMarkdown = (() => {
-    switch (result.status) {
-      case "passed":
-      case "skipped":
-      case "failed":
-      case "blocked": {
-        const manifest = {
-          version: MANIFEST_VERSION as const,
-          changeId: result.changeId,
-          required: result.required,
-          status: result.status,
-          assets: opts.assets ?? [],
-          prMarkdown: "",
-          ...buildVerboseFields(result.status, opts),
-        };
-        return generatePrMarkdown(manifest, opts.repo, opts.sha);
-      }
-    }
-  })();
-
-  const manifest: Record<string, unknown> = {
+  // Build a partial manifest sans prMarkdown first.
+  const partial: Record<string, unknown> = {
     version: MANIFEST_VERSION,
     changeId: result.changeId,
     required: result.required,
     status: result.status,
     assets: opts.assets ?? [],
-    prMarkdown,
   };
 
-  if (opts.scenario) manifest["scenario"] = opts.scenario;
-  if (opts.assertions) manifest["assertions"] = opts.assertions;
-  if (opts.temporaryArtifacts) manifest["temporaryArtifacts"] = opts.temporaryArtifacts;
-  if (opts.failedStep) manifest["failedStep"] = opts.failedStep;
-  if (opts.error) manifest["error"] = opts.error;
-  if (opts.reason) manifest["reason"] = opts.reason;
+  if (opts.scenario) partial["scenario"] = opts.scenario;
+  if (opts.assertions) partial["assertions"] = opts.assertions;
+  if (opts.temporaryArtifacts) partial["temporaryArtifacts"] = opts.temporaryArtifacts;
+  if (opts.failedStep) partial["failedStep"] = opts.failedStep;
+  if (opts.error) partial["error"] = opts.error;
+  if (opts.reason) partial["reason"] = opts.reason;
 
-  return manifest as unknown as EvidenceManifest;
-}
+  partial["prMarkdown"] = "";
 
-function buildVerboseFields(
-  status: string,
-  opts: BuildOptions,
-): Partial<EvidenceManifest> {
-  if (status === "skipped") {
-    return { reason: opts.reason ?? "" };
-  }
-  if (status === "failed") {
-    return {
-      failedStep: opts.failedStep ?? "",
-      error: opts.error ?? "",
-      temporaryArtifacts: opts.temporaryArtifacts ?? {},
-    };
-  }
-  if (status === "blocked") {
-    return { reason: opts.reason ?? "" };
-  }
-  return {};
+  // Generate PR markdown from the partial manifest, then attach it.
+  const manifestBeforeMd = partial as unknown as EvidenceManifest;
+  const prMarkdown = generatePrMarkdown(manifestBeforeMd, opts.repo, opts.sha);
+  partial["prMarkdown"] = prMarkdown;
+
+  return partial as unknown as EvidenceManifest;
 }
 
 export function buildManifest(

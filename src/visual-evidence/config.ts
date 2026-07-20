@@ -142,8 +142,8 @@ function applyEnvOverrides(cfg: VisualEvidenceConfig): VisualEvidenceConfig {
   return next;
 }
 
-function deepMerge<T extends Record<string, unknown>>(base: T, override: Partial<T>): T {
-  const out: Record<string, unknown> = structuredClone(base as Record<string, unknown>);
+function deepMerge<T extends object>(base: T, override: Partial<T>): T {
+  const out: Record<string, unknown> = { ...(base as Record<string, unknown>) };
   for (const [k, v] of Object.entries(override ?? {})) {
     if (v === null || v === undefined) continue;
     const baseVal = out[k];
@@ -154,7 +154,7 @@ function deepMerge<T extends Record<string, unknown>>(base: T, override: Partial
       typeof v === "object" &&
       !Array.isArray(v)
     ) {
-      out[k] = deepMerge(baseVal as Record<string, unknown>, v as Record<string, unknown>);
+      out[k] = deepMerge(baseVal as object, v as object);
     } else {
       out[k] = v;
     }

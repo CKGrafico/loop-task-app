@@ -32,8 +32,6 @@ import type {
   BlockedEvidenceResult,
   EvidenceAsset,
   CaptureCandidate,
-  AssertionResult,
-  Scenario,
   RepoCoordinates,
 } from "./types.js";
 import type { VisualEvidenceConfig } from "./config.js";
@@ -44,7 +42,7 @@ import { deriveScenario } from "./scenario-deriver.js";
 import { getScenario, runScenario, type ScenarioContext } from "./scenario-registry.js";
 import { prepareTempDir } from "./launch/deterministic-env.js";
 import { launchElectronApp } from "./launch/electron-launcher.js";
-import { captureScreenshot, captureFailureScreenshot } from "./capture/screenshot.js";
+import { captureScreenshot } from "./capture/screenshot.js";
 import { generateGif } from "./capture/gif.js";
 import { enableVideo, enableTracing, stopTracing } from "./capture/video.js";
 import { chooseFinalAssets } from "./size-limits.js";
@@ -242,6 +240,15 @@ export async function runVisualEvidence(
     } as PassedEvidenceResult;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    // Best-effort failure capture for debugging
+    if (launched) {
+      try {
+        const { captureFailureScreenshot } = await import("./capture/screenshot.js");
+        await captureFailureScreenshot(launched.window, temp.failureScreenshot);
+      } catch {
+        // ignore — primary failure is reported via the structured result
+      }
+    }
     return failedResult(
       input.changeId,
       message,
@@ -253,7 +260,6 @@ export async function runVisualEvidence(
       },
     );
   } finally {
-    // Try to capture a failure screenshot before closing
     // Best-effort stop tracing + close app
     if (launched) {
       try {
@@ -268,10 +274,6 @@ export async function runVisualEvidence(
       }
     }
   }
-
-  // Helper never reached — TypeScript control-flow hint
-  void (undefined as AssertionResult);
-  void (undefined as Scenario);
 }
 
 function blockedResult(changeId: string, reason: string): BlockedEvidenceResult {
@@ -327,6 +329,7 @@ async function resolveHeadSha(repoRoot: string): Promise<string> {
 }
 
 async function resolveRepo(repoRoot: string): Promise<RepoCoordinates> {
+  void repoRoot;
   // Default to the canonical repo from AGENTS.md / GitHub. The CLI tries `gh`
   // first; we keep a sensible default here.
   return { owner: "CKGrafico", name: "orbion" };

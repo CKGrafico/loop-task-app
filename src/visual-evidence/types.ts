@@ -175,6 +175,7 @@ export interface CaptureCandidate {
   readonly buffer: Buffer;
   readonly width: number;
   readonly height: number;
+  readonly bytes: number;
   readonly format: string;
   readonly fps?: number;
   readonly durationSeconds?: number;

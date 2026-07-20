@@ -10,7 +10,7 @@
  * with a human-readable description on failure. The orchestrator (run.ts)
  * catches these to build the failed-step result.
  */
-import { expect as pwExpect } from "playwright";
+import { expect as pwExpect } from "@playwright/test";
 
 export class AssertionFailure extends Error {
   constructor(message: string) {
