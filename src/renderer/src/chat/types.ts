@@ -2,6 +2,7 @@ import type { ChainStep } from "../components/TaskChainView";
 import type { SimilarLoopMatch } from "../fleet-similarity";
 import type { ShapeAdaptation } from "../fleet-shape-adapt";
 import type { StructuralDiff, SiblingCandidate, SiblingOfferStatus } from "../../../shared/sibling-offer-types";
+import type { PrVerdict } from "../../../shared/ipc";
 import type { FailureCategory } from "./diagnoseFailure";
 
 export type ToolCallStatus = "running" | "completed" | "error";
@@ -83,7 +84,8 @@ export type RowKind =
   | "loop-proposal"
   | "chain-edit-proposal"
   | "sibling-offer"
-  | "failure-diagnosis";
+  | "failure-diagnosis"
+  | "pr-reference-card";
 
 export interface BaseRow {
   id: string;
@@ -264,6 +266,24 @@ export interface SiblingOfferRow extends BaseRow {
   error: string | null;
 }
 
+/** A compact PR reference card rendered in the chat stream. Provides PR context
+ *  for the agent conversation. Read-only (no inline approve/reject). */
+export interface PrReferenceCardRow extends BaseRow {
+  kind: "pr-reference-card";
+  /** PR number. */
+  prNumber: number;
+  /** PR title. */
+  prTitle: string;
+  /** Repository in "owner/repo" format. */
+  prRepo: string;
+  /** PR author login. */
+  prAuthor: string;
+  /** PR URL (clickable link). */
+  prUrl: string;
+  /** Agent risk verdict (may be undefined while analyzing). */
+  prVerdict?: PrVerdict;
+}
+
 export type TranscriptRow =
   | UserMessageRow
   | AssistantMessageRow
@@ -277,4 +297,5 @@ export type TranscriptRow =
   | LoopProposalRow
   | ChainEditProposalRow
   | SiblingOfferRow
-  | FailureDiagnosisRow;
+  | FailureDiagnosisRow
+  | PrReferenceCardRow;

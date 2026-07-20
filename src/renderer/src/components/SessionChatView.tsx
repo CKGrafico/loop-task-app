@@ -20,6 +20,7 @@ import { FleetShapedProposalCard } from "./FleetShapedProposalCard";
 import { ChainEditProposalCard } from "./ChainEditProposalCard";
 import { SiblingOfferCard } from "./SiblingOfferCard";
 import { FailureDiagnosisPanel } from "./FailureDiagnosisPanel";
+import { PrReferenceCard } from "./PrReferenceCard";
 import { WifiOff } from "lucide-react";
 import { fetchLogs } from "../api";
 
@@ -1114,6 +1115,13 @@ export function SessionChatView({ sessionId, environmentId, environmentName, act
                 return (
                   <div key={row.id} className="transcript-failure-diagnosis">
                     <FailureDiagnosisPanel row={row} />
+                  </div>
+                );
+              }
+              case "pr-reference-card": {
+                return (
+                  <div key={row.id} className="transcript-pr-reference-card">
+                    <PrReferenceCard row={row} />
                   </div>
                 );
               }

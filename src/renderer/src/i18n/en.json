@@ -956,6 +956,7 @@
     "approve": "Approve",
     "requestChanges": "Request changes",
     "disposed": "Reviewed",
+    "discussInChat": "Discuss in chat",
     "commentPlaceholder": "Describe the changes you are requesting\u2026",
     "submitRequestChanges": "Submit",
     "cancelComment": "Cancel",
@@ -997,5 +998,9 @@
     "unsupportedPlatform": "PR review is not supported on this platform",
     "openOnWebMissingUrl": "URL is required",
     "openOnWebInvalidUrl": "Only http: and https: URLs can be opened"
+  },
+  "prReferenceCard": {
+    "openOnPlatform": "Open on GitHub",
+    "noVerdict": "Analyzing\u2026"
   }
 }

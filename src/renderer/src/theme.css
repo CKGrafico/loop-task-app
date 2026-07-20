@@ -2144,6 +2144,131 @@ input {
   letter-spacing: 0.03em;
 }
 
+/* ── PR Reference Card ──────────────────────────────────────────────── */
+
+.transcript-pr-reference-card {
+  padding: 2px 18px 4px;
+}
+
+.pr-reference-card {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  border-left: 3px solid var(--text-muted);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.pr-reference-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pr-reference-card-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.pr-reference-card-number {
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+}
+
+.pr-reference-card-title {
+  font-size: 12px;
+  color: var(--text-primary);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.pr-reference-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding-left: 22px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.pr-reference-card-repo {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.pr-reference-card-separator {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.pr-reference-card-author {
+  flex-shrink: 0;
+}
+
+.pr-reference-card-verdict-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pr-reference-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 22px;
+}
+
+.pr-reference-card-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: var(--font-ui);
+}
+
+.pr-reference-card-link:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border-color: var(--text-muted);
+}
+
+/* ── Review mode "Discuss in chat" button ─────────────────────────── */
+
+.review-mode-action-discuss {
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+
+.review-mode-action-discuss:hover:not(:disabled) {
+  background: rgba(100, 149, 237, 0.1);
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+
 /* ── Loop Proposal Card ──────────────────────────────────────────────── */
 
 .loop-proposal-card {
