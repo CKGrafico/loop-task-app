@@ -4,7 +4,7 @@ import { cid, useInject } from "inversify-hooks";
 import type { ChatTurn, AccessMode, ApprovalDecision, ToolCall, ChainEditProposalStatus, ChainEditOperationSummary, LoopProposalStatus, SharedTaskWarning } from "../chat/types";
 import type { AgentStreamEvent, ReasoningEffort, ReachabilityState } from "../../../shared/ipc";
 import type { IAgentService, IMcpService, ITranscriptService } from "../services/interfaces";
-import type { LoopMeta, Environment } from "../types";
+import type { LoopMeta, Environment, LoopWithOrigin, FleetLoopRollup } from "../types";
 import { useTranscript } from "../chat/useTranscript";
 import { diagnoseFailure } from "../chat/diagnoseFailure";
 import { ChatComposer } from "../chat/ChatComposer";
@@ -116,9 +116,15 @@ interface SessionChatViewProps {
   onDeclineAutoPersist?: () => void;
   /** Callback to un-persist a session (make it ephemeral again, usually requires confirm). */
   onUnpersistSession?: () => void;
+  /** When true, this session has no home scope and the loop bar should render fleet-wide. */
+  fleetMode?: boolean;
+  /** Fleet rollup data. Required when fleetMode is true. */
+  fleetRollup?: FleetLoopRollup;
+  /** All loops with origin metadata, for fleet-mode segment-click handling. */
+  fleetLoopsWithOrigin?: LoopWithOrigin[];
 }
 
-export function SessionChatView({ sessionId, environmentId, environmentName, activeRuntime, model, reasoningEffort, environments, reachability, loops, perEnvLoops, instance, isEphemeral = false, onPersistSession, turnCount, onTurnSent, autoPersistedJustNow, onDeclineAutoPersist, onUnpersistSession }: SessionChatViewProps): React.ReactNode {
+export function SessionChatView({ sessionId, environmentId, environmentName, activeRuntime, model, reasoningEffort, environments, reachability, loops, perEnvLoops, instance, isEphemeral = false, onPersistSession, turnCount, onTurnSent, autoPersistedJustNow, onDeclineAutoPersist, onUnpersistSession, fleetMode, fleetRollup, fleetLoopsWithOrigin }: SessionChatViewProps): React.ReactNode {
   const intl = useIntl();
   const [agentService] = useInject<IAgentService>(cid.IAgentService);
   const [mcpService] = useInject<IMcpService>(cid.IMcpService);
@@ -488,7 +494,60 @@ export function SessionChatView({ sessionId, environmentId, environmentName, act
 
   const handleSegmentClick = useCallback(
     (kind: LoopSegmentKind) => {
-      // Map the segment kind to the matching loop IDs
+      // ── Fleet mode: match across all reachable instances ──
+      if (fleetMode && fleetLoopsWithOrigin) {
+        const matching = kind === "healthy"
+          ? fleetLoopsWithOrigin.filter((lo) => lo.loop.status === "running" || lo.loop.status === "waiting")
+          : fleetLoopsWithOrigin.filter((lo) => lo.loop.status === kind);
+
+        if (matching.length > 0) {
+          const timestamp = Date.now();
+
+          // Group by environmentId so loop cards are inserted with the correct env context.
+          // Each card gets its originating environmentId so the card's actions (pause/stop/trigger)
+          // route to the right instance.
+          const byEnv = new Map<string, LoopWithOrigin[]>();
+          for (const lo of matching) {
+            const existing = byEnv.get(lo.environmentId);
+            if (existing) {
+              existing.push(lo);
+            } else {
+              byEnv.set(lo.environmentId, [lo]);
+            }
+          }
+
+          for (const [envId, envLoops] of byEnv) {
+            insertLoopCards(
+              envLoops.map((lo) => lo.loop.id),
+              envId,
+            );
+          }
+
+          // Auto-diagnose failed loops (per-origin environment)
+          const failedLoops = matching.filter((lo) => lo.loop.status === "failed");
+          if (failedLoops.length > 0) {
+            // Diagnose each failed loop using its originating environment's instance
+            const failedByEnv = new Map<string, LoopMeta[]>();
+            for (const lo of failedLoops) {
+              const existing = failedByEnv.get(lo.environmentId);
+              if (existing) {
+                existing.push(lo.loop);
+              } else {
+                failedByEnv.set(lo.environmentId, [lo.loop]);
+              }
+            }
+            for (const [envId, envFailedLoops] of failedByEnv) {
+              const envInstance = environments.find((e) => e.id === envId);
+              if (envInstance) {
+                void diagnoseAndInsert(envFailedLoops, envId, timestamp);
+              }
+            }
+          }
+        }
+        return;
+      }
+
+      // ── Standard (scoped) mode ──
       const matchingLoops = kind === "healthy"
         ? loops.filter((l) => l.status === "running" || l.status === "waiting")
         : loops.filter((l) => l.status === kind);
@@ -507,7 +566,7 @@ export function SessionChatView({ sessionId, environmentId, environmentName, act
         }
       }
     },
-    [loops, environmentId, insertLoopCards, diagnoseAndInsert],
+    [fleetMode, fleetLoopsWithOrigin, loops, environmentId, insertLoopCards, diagnoseAndInsert, environments],
   );
 
   // ── Loop proposal callbacks ───────────────────────────────────────────
@@ -603,7 +662,7 @@ export function SessionChatView({ sessionId, environmentId, environmentName, act
           )}
         </div>
       ) : null}
-      <LoopSummaryBar loops={loops} reachability={reachability} onSegmentClick={handleSegmentClick} />
+      <LoopSummaryBar loops={loops} reachability={reachability} onSegmentClick={handleSegmentClick} fleetMode={fleetMode} fleetRollup={fleetRollup} />
       {showAutoPersistNotice ? (
         <div className="auto-persist-notice">
           <span className="auto-persist-notice-text">
@@ -706,9 +765,24 @@ export function SessionChatView({ sessionId, environmentId, environmentName, act
                 const envLoops = perEnvLoops[row.environmentId] ?? loops;
                 const loop = envLoops.find((l) => l.id === row.loopId);
                 if (!loop) return null;
+                // In fleet mode, look up the origin (project + instance) for this card
+                const origin = fleetMode && fleetLoopsWithOrigin
+                  ? fleetLoopsWithOrigin.find((lo) => lo.loop.id === row.loopId)
+                  : undefined;
+                const originEnv = origin
+                  ? environments.find((e) => e.id === origin.environmentId)
+                  : undefined;
                 return (
                   <div key={row.id} className="transcript-loop-card">
-                    <LoopCard loop={loop} reachability={reachability} instance={instance} scrollContainerRef={scrollRef} chainVersion={chainVersion} />
+                    {origin ? (
+                      <span className="loop-card-origin-label">
+                        {intl.formatMessage(
+                          { id: "loopCard.originLabel" },
+                          { project: origin.projectName, instance: originEnv?.name ?? origin.environmentName },
+                        )}
+                      </span>
+                    ) : null}
+                    <LoopCard loop={loop} reachability={reachability} instance={originEnv ?? instance} scrollContainerRef={scrollRef} chainVersion={chainVersion} />
                   </div>
                 );
               }

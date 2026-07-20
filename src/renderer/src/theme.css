@@ -1319,6 +1319,28 @@ input {
   outline-offset: 1px;
 }
 
+/* ── Fleet-mode loop summary bar ── */
+
+.loop-summary-bar--fleet {
+  background: color-mix(in srgb, var(--bg-input) 90%, color-mix(in srgb, var(--accent) 8%, transparent));
+}
+
+.loop-summary-fleet-prefix {
+  color: var(--text-muted);
+  font-size: 11px;
+  margin-right: 2px;
+}
+
+/* ── Loop card origin label (fleet mode: "project on instance") ── */
+
+.loop-card-origin-label {
+  display: block;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+  letter-spacing: 0.02em;
+}
+
 .loop-summary-segment--clickable:active {
   background: var(--bg-active);
 }

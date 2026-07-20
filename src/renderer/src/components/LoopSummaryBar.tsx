@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { useIntl } from "react-intl";
-import type { LoopMeta, LoopStatus } from "../types";
+import type { LoopMeta, LoopStatus, FleetLoopRollup } from "../types";
 import { useNextRunCountdown } from "./useNextRunCountdown";
 
 /** A segment that can be clicked in the summary bar.
@@ -15,6 +15,10 @@ interface LoopSummaryBarProps {
   reachability?: "connected" | "reconnecting" | "unreachable";
   /** Called when the user clicks a bar segment. The handler should summon matching loop cards. */
   onSegmentClick?: (kind: LoopSegmentKind) => void;
+  /** When true, the bar renders fleet-wide aggregated totals instead of per-scope counts. */
+  fleetMode?: boolean;
+  /** Fleet rollup data. Required when fleetMode is true. */
+  fleetRollup?: FleetLoopRollup;
 }
 
 /** Healthy statuses that collapse to a single count. */
@@ -33,11 +37,17 @@ const EXCEPTION_COLORS: Record<string, string> = {
   finished: "var(--status-finished)",
 };
 
-export function LoopSummaryBar({ loops, reachability, onSegmentClick }: LoopSummaryBarProps): React.ReactNode {
+export function LoopSummaryBar({ loops, reachability, onSegmentClick, fleetMode, fleetRollup }: LoopSummaryBarProps): React.ReactNode {
   const intl = useIntl();
 
   const isReachable = reachability === "connected" || reachability === undefined;
 
+  // ── Fleet mode rendering ────────────────────────────────────────────
+  if (fleetMode) {
+    return <FleetLoopSummaryBar fleetRollup={fleetRollup} onSegmentClick={onSegmentClick} />;
+  }
+
+  // ── Standard (scoped) rendering ─────────────────────────────────────
   const counts = useMemo(() => {
     const result: Record<LoopStatus, number> = {
       running: 0,
@@ -159,6 +169,112 @@ export function LoopSummaryBar({ loops, reachability, onSegmentClick }: LoopSumm
           )}
         </span>
       ) : null}
+    </div>
+  );
+}
+
+// ── Fleet-mode sub-component ────────────────────────────────────────────
+
+function FleetLoopSummaryBar({
+  fleetRollup,
+  onSegmentClick,
+}: {
+  fleetRollup?: FleetLoopRollup;
+  onSegmentClick?: (kind: LoopSegmentKind) => void;
+}): React.ReactNode {
+  const intl = useIntl();
+
+  // No rollup data at all (shouldn't happen in practice, but be safe)
+  if (!fleetRollup) {
+    return (
+      <div className="loop-summary-bar loop-summary-bar--empty loop-summary-bar--fleet">
+        <span className="loop-summary-empty-text">
+          {intl.formatMessage({ id: "loopSummary.fleetEmptyState" })}
+        </span>
+      </div>
+    );
+  }
+
+  const { counts, projectCount, loopsWithOrigin } = fleetRollup;
+  const totalLoops = loopsWithOrigin.length;
+
+  // No loops across the entire fleet
+  if (totalLoops === 0) {
+    return (
+      <div className="loop-summary-bar loop-summary-bar--empty loop-summary-bar--fleet">
+        <span className="loop-summary-empty-text">
+          {intl.formatMessage({ id: "loopSummary.fleetEmptyState" })}
+        </span>
+      </div>
+    );
+  }
+
+  const healthyCount = counts.running + counts.waiting;
+  const exceptions = EXCEPTION_STATUSES.filter((s) => counts[s] > 0);
+
+  /** Map an exception status to its fleet i18n key. */
+  const fleetStatusKeys: Record<string, { count: string; aria: string }> = {
+    failed: { count: "loopSummary.fleetFailed", aria: "loopSummary.fleetFailedAria" },
+    paused: { count: "loopSummary.fleetPaused", aria: "loopSummary.fleetPausedAria" },
+    stopped: { count: "loopSummary.fleetStopped", aria: "loopSummary.fleetStoppedAria" },
+    finished: { count: "loopSummary.fleetFinished", aria: "loopSummary.fleetFinishedAria" },
+  };
+
+  return (
+    <div className="loop-summary-bar loop-summary-bar--fleet">
+      <div className="loop-summary-segments">
+        {/* Fleet prefix: "across N projects" */}
+        <span className="loop-summary-fleet-prefix">
+          {intl.formatMessage(
+            { id: "loopSummary.fleetAcrossProjects" },
+            { projectCount },
+          )}
+        </span>
+
+        {/* Healthy count */}
+        {healthyCount > 0 ? (
+          <span
+            className="loop-summary-segment loop-summary-healthy loop-summary-segment--clickable"
+            role="button"
+            tabIndex={0}
+            aria-label={intl.formatMessage({ id: "loopSummary.fleetRunningAria" }, { count: healthyCount })}
+            onClick={onSegmentClick ? () => onSegmentClick("healthy") : undefined}
+            onKeyDown={onSegmentClick ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSegmentClick("healthy"); } } : undefined}
+          >
+            {intl.formatMessage(
+              { id: "loopSummary.fleetRunning" },
+              { count: healthyCount },
+            )}
+          </span>
+        ) : null}
+
+        {/* Exception segments */}
+        {exceptions.map((status) => {
+          const keys = fleetStatusKeys[status];
+          return (
+            <span
+              key={status}
+              className={`loop-summary-segment loop-summary-exception${
+                status === "failed" ? " loop-summary-exception--failed" : ""
+              } loop-summary-segment--clickable`}
+              style={{ color: EXCEPTION_COLORS[status] }}
+              role="button"
+              tabIndex={0}
+              aria-label={intl.formatMessage({ id: keys.aria }, { count: counts[status] })}
+              onClick={onSegmentClick ? () => onSegmentClick(status as LoopSegmentKind) : undefined}
+              onKeyDown={onSegmentClick ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSegmentClick(status as LoopSegmentKind); } } : undefined}
+            >
+              {intl.formatMessage(
+                { id: keys.count },
+                { count: counts[status] },
+              )}
+            </span>
+          );
+        })}
+      </div>
+
+      {/* No next-run countdown in fleet mode — it doesn't make sense
+          to show a single next-run when the estate has many schedulers. */}
     </div>
   );
 }

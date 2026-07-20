@@ -757,7 +757,20 @@
     "stoppedCountAria": "Show {count} stopped loop{count, plural, one {} other {s}} in chat",
     "finishedCount": "{count} finished",
     "finishedCountAria": "Show {count} finished loop{count, plural, one {} other {s}} in chat",
-    "nextRun": "next: {loop} in {countdown}"
+    "nextRun": "next: {loop} in {countdown}",
+    "fleetAcrossProjects": "across {projectCount, plural, one {1 project} other {# projects}}",
+    "fleetRunning": "{count} running",
+    "fleetRunningAria": "Show {count} running loop{count, plural, one {} other {s}} across the fleet",
+    "fleetFailed": "{count} failed",
+    "fleetFailedAria": "Show {count} failed loop{count, plural, one {} other {s}} across the fleet",
+    "fleetPaused": "{count} paused",
+    "fleetPausedAria": "Show {count} paused loop{count, plural, one {} other {s}} across the fleet",
+    "fleetStopped": "{count} stopped",
+    "fleetStoppedAria": "Show {count} stopped loop{count, plural, one {} other {s}} across the fleet",
+    "fleetFinished": "{count} finished",
+    "fleetFinishedAria": "Show {count} finished loop{count, plural, one {} other {s}} across the fleet",
+    "fleetEmptyState": "No loops across the fleet — add an instance to begin",
+    "fleetUnknownState": "{count} loops across the fleet — status unknown"
   },
   "loopCard": {
     "interval": "interval",
@@ -798,7 +811,8 @@
     "resultError": "Action failed",
     "tasks": "Tasks",
     "expandChain": "Show task chain",
-    "chainLoading": "Loading…"
+    "chainLoading": "Loading…",
+    "originLabel": "{project} on {instance}"
   },
   "taskChain": {
     "label": "TASK CHAIN",
