@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useIntl, type IntlShape } from "react-intl";
 import { cid, useInject } from "inversify-hooks";
 import type { AgentRuntime, ReachMethod, SshHost, VmWizardProgress, VmWizardServiceSelection, VmWizardServiceStatus, VmWizardStep, BootstrapSeed } from "../../../shared/ipc";
@@ -73,6 +73,8 @@ export function AddVmWizard(props: {
   const [progress, setProgress] = useState<VmWizardProgress | null>(null);
   const [running, setRunning] = useState(false);
   const [doneResult, setDoneResult] = useState<{ environmentId: string; environmentName: string; daemonUrl: string } | null>(null);
+  const doneResultRef = useRef(doneResult);
+  doneResultRef.current = doneResult;
   const [serviceSelection, setServiceSelection] = useState<VmWizardServiceSelection>(() => {
     const installTools: Record<string, boolean> = {};
     for (const tool of TOOL_DEFINITIONS) {
@@ -162,6 +164,29 @@ export function AddVmWizard(props: {
       void configService.setMainVm(doneResult.environmentId);
     }
     onDone(doneResult.environmentId, doneResult.environmentName, doneResult.daemonUrl);
+  };
+
+  const handleClose = (): void => {
+    if (doneResult) {
+      handleDoneFinal();
+    } else if (isDone) {
+      // Wizard reached "done" step but the IPC promise hasn't resolved yet
+      // (seedEnvironmentInfrastructure may still be running in the main process).
+      // Poll for doneResult, then complete.
+      let attempts = 0;
+      const poll = (): void => {
+        if (doneResultRef.current) {
+          handleDoneFinal();
+          return;
+        }
+        if (attempts++ < 50) {
+          setTimeout(poll, 100);
+        }
+      };
+      poll();
+    } else {
+      handleCancel();
+    }
   };
 
   const currentStep = progress?.step ?? "idle";
@@ -804,7 +829,7 @@ export function AddVmWizard(props: {
               </button>
             </>
           ) : !isConsentStep && !isHostKeyVerify ? (
-            <button className="btn" onClick={() => doneResult ? handleDoneFinal() : handleCancel()}>
+            <button className="btn" onClick={handleClose}>
               {running ? intl.formatMessage({ id: "vmWizard.cancel" }) : intl.formatMessage({ id: "vmWizard.close" })}
             </button>
           ) : null}
