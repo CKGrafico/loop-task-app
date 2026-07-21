@@ -1,4 +1,4 @@
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Cancel button uses i18n key
 The InstanceSettingsPanel remove-confirmation dialog SHALL render the Cancel button text using `intl.formatMessage({ id: "instanceSettings.cancel" })` instead of a hardcoded string. The `instanceSettings.cancel` key SHALL be defined in the English locale catalog (`en.json`).
