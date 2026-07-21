@@ -1284,8 +1284,10 @@ function AppInner(): React.ReactNode {
     const defaultRuntime = env?.agentRuntime ?? "opencode";
     const envModelList = envModels[environmentId] ?? [];
     const defaultModel = envModelList.find((m) => m.available)?.id;
+    const projectSessions = sessions.filter((session) => session.projectName === projectName);
+    const title = `New chat${projectSessions.some((session) => session.title === "New chat") ? ` ${projectSessions.length + 1}` : ""}`;
     const newSession = await configService.addChatSession({
-      title: `New chat`,
+      title,
       projectName,
       environmentId,
       workingDirectory,
@@ -1299,7 +1301,7 @@ function AppInner(): React.ReactNode {
     setActiveSessionId(newSession.id);
     setView({ kind: "session", sessionId: newSession.id });
     select(environmentId);
-  }, [configService, select, environments, envModels]);
+  }, [configService, select, environments, envModels, sessions]);
 
   const updatedLabel =
     lastUpdated === null ? "..." : timeAgo(new Date(lastUpdated).toISOString());
@@ -1830,6 +1832,7 @@ function AppInner(): React.ReactNode {
                   onOpenProjectChat={handleOpenProjectChat}
                   onMoveSessionToProject={handleMoveSessionToProject}
                   onOpenSettings={() => setSettingsPanelOpen(true)}
+                  onSessionsChanged={(updatedSessions) => setSessions(updatedSessions)}
                 />
               </aside>
             ) : null}

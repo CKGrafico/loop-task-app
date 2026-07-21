@@ -129,13 +129,15 @@ export function Sidebar(props: {
   onMoveSessionToProject?: (sessionId: string, targetProjectName: string) => void;
   /** Open the global settings panel. */
   onOpenSettings?: () => void;
+  /** Notify the parent when a session mutation changes persisted sessions. */
+  onSessionsChanged?: (sessions: ChatSession[]) => void;
 }): React.ReactNode {
   const {
     environments, selectedId, health, connectionStatus,
     perEnvLoops, perEnvProjects, view, onNavigate,
     onSelect, onAddVm, fleetActivityEnabled, inboxItemCount,
     onNavigateToLoop, onNavigateToProject, onNavigateToInbox,
-    reachability, mainVmId,     onNavigateToSession, activeSessionId, onOpenProjectChat, sessions: propSessions, onMoveSessionToProject, onOpenSettings,
+    reachability, mainVmId,     onNavigateToSession, activeSessionId, onOpenProjectChat, sessions: propSessions, onMoveSessionToProject, onOpenSettings, onSessionsChanged,
   } = props;
   const intl = useIntl();
   const [configService] = useInject<IConfigService>(cid.IConfigService);
@@ -742,6 +744,7 @@ export function Sidebar(props: {
                 void configService.pinChatSession(contextMenu.sessionId, !contextMenu.pinned).then(async () => {
                   const updated = await configService.getChatSessions();
                   setLocalSessions(updated);
+                  onSessionsChanged?.(updated);
                 });
                 setContextMenu(null);
               }}
@@ -810,6 +813,7 @@ export function Sidebar(props: {
                     void configService.renameChatSession(renamingSessionId, trimmed).then(async () => {
                       const updated = await configService.getChatSessions();
                       setLocalSessions(updated);
+                      onSessionsChanged?.(updated);
                     });
                   }
                   setRenamingSessionId(null);

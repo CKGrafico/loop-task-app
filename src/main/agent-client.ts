@@ -96,13 +96,6 @@ function buildAuthHeaders(password: string | null): Record<string, string> {
   return { Authorization: `Basic ${encoded}` };
 }
 
-function requestModel(model: string | undefined): { providerID: string; modelID: string } | undefined {
-  if (!model) return undefined;
-  const separator = model.indexOf("/");
-  if (separator <= 0 || separator === model.length - 1) return undefined;
-  return { providerID: model.slice(0, separator), modelID: model.slice(separator + 1) };
-}
-
 function responseText(parts: unknown): string {
   if (!Array.isArray(parts)) return "";
   return parts
@@ -167,13 +160,11 @@ export async function sendPromptToAgent(
       }
     }
 
-    const model = requestModel(args.model);
     const promptRes = await fetch(`${baseUrl}/session/${encodeURIComponent(opencodeSessionId)}/message`, {
       method: "POST",
       headers,
       body: JSON.stringify({
         parts: [{ type: "text", text: args.prompt }],
-        ...(model ? { model } : {}),
       }),
       signal: controller.signal,
     });
