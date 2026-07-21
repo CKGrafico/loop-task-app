@@ -36,7 +36,7 @@ import { msg } from "./i18n.js";
 import { resolvePlatformCli } from "./platform-cli.js";
 import { ghExec, sanitizeText, validateCliInputs } from "./gh-exec.js";
 import { analyzeDiff, classifyDiffSections, parseDiffFiles } from "./diff-analyzer.js";
-import { classifyPlatform, parseGitRemoteOutput, detectPlatform, platformCache, platformCacheKey } from "./platform-classifier.js";
+import { detectPlatform, platformCache, platformCacheKey } from "./platform-classifier.js";
 
 // ── Types for dependency injection from index.ts ──────────────────────
 
@@ -544,20 +544,8 @@ export async function handleInfraExecuteAction(
         return { ok: true, data: result };
       }
 
-      const platform = await detectPlatform(directory);
+      const { platform, remotes } = await detectPlatform(directory);
       platformCache.set(key, platform);
-
-      let remotes: string[] = [];
-      try {
-        remotes = await new Promise<string[]>((resolve) => {
-          execFile("git", ["remote", "-v"], { cwd: directory, timeout: 10_000 }, (err, stdout) => {
-            if (err) { resolve([]); return; }
-            resolve(parseGitRemoteOutput(stdout));
-          });
-        });
-      } catch {
-        // best effort
-      }
 
       const result: PlatformDetectionResult = {
         platform,
