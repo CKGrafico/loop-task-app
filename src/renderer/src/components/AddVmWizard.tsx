@@ -252,7 +252,7 @@ export function AddVmWizard(props: {
 
   return (
     <div className="modal-backdrop" onClick={handleCancel}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 860 }}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 860, maxHeight: "calc(100vh - 80px)", overflowY: "auto" }}>
         <h2>{intl.formatMessage({ id: "vmWizard.title" })}</h2>
         <p style={{ fontSize: 12.5, color: "var(--text-secondary)", margin: "4px 0 14px" }}>
           {intl.formatMessage({ id: "vmWizard.description" })}
