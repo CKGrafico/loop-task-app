@@ -96,6 +96,22 @@ function buildAuthHeaders(password: string | null): Record<string, string> {
   return { Authorization: `Basic ${encoded}` };
 }
 
+function requestModel(model: string | undefined): { providerID: string; modelID: string } | undefined {
+  if (!model) return undefined;
+  const separator = model.indexOf("/");
+  if (separator <= 0 || separator === model.length - 1) return undefined;
+  return { providerID: model.slice(0, separator), modelID: model.slice(separator + 1) };
+}
+
+function responseText(parts: unknown): string {
+  if (!Array.isArray(parts)) return "";
+  return parts
+    .filter((part): part is Record<string, unknown> => typeof part === "object" && part !== null)
+    .filter((part) => part.type === "text")
+    .map((part) => String(part.text ?? part.content ?? ""))
+    .join("");
+}
+
 // ── Public API ────────────────────────────────────────────────────────────
 
 /**
@@ -128,26 +144,37 @@ export async function sendPromptToAgent(
   try {
     await ensureOpenCodeReady(args.environmentId, baseUrl);
 
-    // Step 1: Create or resume session + send prompt asynchronously
-    const promptBody: Record<string, unknown> = {
-      prompt: args.prompt,
-    };
-    if (args.sessionId) {
-      promptBody.sessionID = args.sessionId;
-    }
-    if (args.model) {
-      promptBody.model = args.model;
-    }
-    if (args.reasoningEffort) {
-      promptBody.reasoningEffort = args.reasoningEffort;
-    }
-
     const promptTimeout = setTimeout(() => controller.abort(), PROMPT_TIMEOUT_MS);
+    let opencodeSessionId = args.sessionId;
 
-    const promptRes = await fetch(`${baseUrl}/session/prompt`, {
+    if (!opencodeSessionId) {
+      const sessionRes = await fetch(`${baseUrl}/session`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ title: "Orbion chat" }),
+        signal: controller.signal,
+      });
+      if (!sessionRes.ok) {
+        const detail = await sessionRes.text().catch(() => "");
+        clearTimeout(promptTimeout);
+        return { ok: false, error: msg("agent.promptFailed", { status: String(sessionRes.status), detail: detail.slice(0, 200) }) };
+      }
+      const session = await sessionRes.json() as Record<string, unknown>;
+      opencodeSessionId = typeof session.id === "string" ? session.id : "";
+      if (!opencodeSessionId) {
+        clearTimeout(promptTimeout);
+        return { ok: false, error: msg("agent.promptError", { detail: "OpenCode did not return a session ID" }) };
+      }
+    }
+
+    const model = requestModel(args.model);
+    const promptRes = await fetch(`${baseUrl}/session/${encodeURIComponent(opencodeSessionId)}/message`, {
       method: "POST",
       headers,
-      body: JSON.stringify(promptBody),
+      body: JSON.stringify({
+        parts: [{ type: "text", text: args.prompt }],
+        ...(model ? { model } : {}),
+      }),
       signal: controller.signal,
     });
 
@@ -163,7 +190,6 @@ export async function sendPromptToAgent(
     }
 
     const promptData = await promptRes.json() as Record<string, unknown>;
-    const opencodeSessionId = String(promptData.sessionID ?? promptData.id ?? args.sessionId ?? "");
 
     // Track in-flight prompt
     const entry: InFlightPrompt = {
@@ -175,20 +201,10 @@ export async function sendPromptToAgent(
     };
     inFlight.set(key, entry);
 
-    // Step 2: Connect to the SSE event stream for this session
-    const eventsPath = args.sessionId
-      ? `/v2/session/events?sessionID=${encodeURIComponent(opencodeSessionId)}`
-      : `/v2/session/events?sessionID=${encodeURIComponent(opencodeSessionId)}`;
-
-    // Fire-and-forget the SSE stream consumption
-    void consumeEventStream(
-      baseUrl,
-      eventsPath,
-      headers,
-      controller,
-      args.chatSessionId,
-      args.turnId,
-    );
+    const text = responseText(promptData.parts);
+    if (text) forwardEvent({ kind: "text-delta", chatSessionId: args.chatSessionId, turnId: args.turnId, text });
+    forwardEvent({ kind: "turn-finished", chatSessionId: args.chatSessionId, turnId: args.turnId });
+    inFlight.delete(key);
 
     return { ok: true, sessionId: opencodeSessionId };
   } catch (err) {
