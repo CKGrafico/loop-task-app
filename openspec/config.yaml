@@ -32,8 +32,7 @@ rules:
   proposal:
     - Every change must map to a concrete user-facing capability or an
       architectural constraint from ARCHITECTURE.md.
-    - Respect the Electron process boundaries: network I/O belongs in main, the
-      renderer only calls window.api. Call out any new IPC channel explicitly.
+    - "Respect the Electron process boundaries: network I/O belongs in main, the renderer only calls window.api. Call out any new IPC channel explicitly."
   tasks:
     - Split work so concurrent tasks touch disjoint files (max 3 parallel).
     - Include a verification step; at minimum `pnpm typecheck` must pass.
