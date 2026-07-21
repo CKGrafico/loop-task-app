@@ -1,6 +1,11 @@
 import { execFile } from "node:child_process";
 import type { PlatformType } from "../shared/ipc.js";
 
+export interface PlatformDetection {
+  platform: PlatformType;
+  remotes: string[];
+}
+
 /**
  * Classify the hosting platform from a set of git remote URLs.
  *
@@ -74,17 +79,22 @@ export function platformCacheKey(environmentId: string, projectId: string): stri
 
 /**
  * Detect the hosting platform by inspecting git remotes in a directory.
- * Falls back to "unknown" when git is unavailable or no recognized remotes exist.
+ * Returns both the classified platform and the parsed remote URLs from
+ * a single `git remote -v` execution.
+ * Falls back to `{ platform: "unknown", remotes: [] }` on failure.
  */
-export function detectPlatform(directory: string): Promise<PlatformType> {
+export function detectPlatform(directory: string): Promise<PlatformDetection> {
   return new Promise((resolve) => {
     execFile("git", ["remote", "-v"], { cwd: directory, timeout: 10_000 }, (err, stdout) => {
       if (err) {
-        resolve("unknown");
+        resolve({ platform: "unknown", remotes: [] });
         return;
       }
       const urls = parseGitRemoteOutput(stdout);
-      resolve(classifyPlatform(urls));
+      resolve({
+        platform: classifyPlatform(urls),
+        remotes: urls,
+      });
     });
   });
 }
