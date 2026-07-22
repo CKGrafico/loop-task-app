@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { useIntl } from "react-intl";
 import type { GlobalSettings, AgentRuntime, Environment } from "../../../shared/ipc";
-import { X } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 
 interface SettingsPanelProps {
   open: boolean;
@@ -79,14 +79,12 @@ export function SettingsPanel({
   if (!open) return null;
 
   return (
-    <div className="settings-backdrop" onClick={onClose}>
-      <div className="settings-drawer" onClick={(e) => e.stopPropagation()}>
-        <div className="settings-header">
-          <h2>{intl.formatMessage({ id: "settings.title" })}</h2>
-          <button className="icon-btn" onClick={onClose} title={intl.formatMessage({ id: "settings.close" })}>
-            <X size={16} />
-          </button>
-        </div>
+    <Sheet open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
+      <SheetContent side="right">
+        <SheetHeader>
+          <SheetTitle>{intl.formatMessage({ id: "settings.title" })}</SheetTitle>
+          <SheetDescription>{intl.formatMessage({ id: "settings.close" })}</SheetDescription>
+        </SheetHeader>
 
         <div className="settings-body">
           {/* Theme */}
@@ -205,7 +203,7 @@ export function SettingsPanel({
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      </SheetContent>
+    </Sheet>
   );
 }

@@ -5,6 +5,7 @@ import type { AgentRuntime, ReachMethod, SshHost, VmWizardProgress, VmWizardServ
 import { TOOL_DEFINITIONS, type ToolDefinition } from "../../../shared/tool-definitions";
 import { ShieldCheck, X, Check, Loader, SkipForward, Lock, Globe, Terminal } from "lucide-react";
 import { translateMessage } from "../i18n";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import type { IVmWizardService, IConfigService, ILogService } from "../services/interfaces";
 
 const STEP_LABEL_KEYS: Record<VmWizardStep, string> = {
@@ -276,12 +277,12 @@ export function AddVmWizard(props: {
   }
 
   return (
-    <div className="modal-backdrop" onClick={handleCancel}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 860, maxHeight: "calc(100vh - 80px)", overflowY: "auto" }}>
-        <h2>{intl.formatMessage({ id: "vmWizard.title" })}</h2>
-        <p style={{ fontSize: 12.5, color: "var(--text-secondary)", margin: "4px 0 14px" }}>
-          {intl.formatMessage({ id: "vmWizard.description" })}
-        </p>
+    <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) handleCancel(); }}>
+      <DialogContent className="max-w-[860px] max-h-[calc(100vh-80px)] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{intl.formatMessage({ id: "vmWizard.title" })}</DialogTitle>
+          <DialogDescription>{intl.formatMessage({ id: "vmWizard.description" })}</DialogDescription>
+        </DialogHeader>
 
         <div className="field">
           <label>{intl.formatMessage({ id: "vmWizard.name" })}</label>
@@ -859,7 +860,7 @@ export function AddVmWizard(props: {
             animation: spin 1s linear infinite;
           }
         `}</style>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

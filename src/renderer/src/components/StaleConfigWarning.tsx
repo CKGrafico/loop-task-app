@@ -2,6 +2,17 @@ import { useState } from "react";
 import { useIntl } from "react-intl";
 import { translateMessage } from "../i18n";
 import type { StaleConfigResult, PullRestoreResult } from "../../../shared/ipc";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+  AlertDialogDescription,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 
 /**
  * Stale-config warning dialog: shown when a stamp-checked write detects
@@ -14,11 +25,15 @@ export function StaleConfigWarning({
   onPullRemote,
   onOverwriteAnyway,
   onCancel,
+  open = true,
+  onOpenChange,
 }: {
   staleResult: StaleConfigResult;
   onPullRemote: () => Promise<PullRestoreResult>;
   onOverwriteAnyway: () => Promise<void>;
   onCancel: () => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }): React.ReactNode {
   const intl = useIntl();
   const [acting, setActing] = useState<"pull" | "overwrite" | null>(null);
@@ -32,7 +47,6 @@ export function StaleConfigWarning({
       setActing(null);
       setError(translateMessage(intl, result.error) ?? intl.formatMessage({ id: "staleConfig.pullFailed" }, { error: "Unknown error" }));
     }
-    // On success, the parent component handles state changes
   }
 
   async function handleOverwriteAnyway(): Promise<void> {
@@ -47,18 +61,18 @@ export function StaleConfigWarning({
   }
 
   return (
-    <div className="modal-backdrop">
-      <div className="modal stale-config-modal">
-        <h2 className="modal-title">
-          {intl.formatMessage({ id: "staleConfig.title" })}
-        </h2>
-        <p className="modal-body">
-          {intl.formatMessage({ id: "staleConfig.description" })}
-        </p>
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{intl.formatMessage({ id: "staleConfig.title" })}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {intl.formatMessage({ id: "staleConfig.description" })}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
         {error && (
           <p className="stale-config-error">{error}</p>
         )}
-        <div className="modal-actions">
+        <AlertDialogFooter>
           {acting ? (
             <span className="stale-config-progress">
               {acting === "pull"
@@ -67,28 +81,19 @@ export function StaleConfigWarning({
             </span>
           ) : (
             <>
-              <button
-                className="btn primary"
-                onClick={() => void handlePullRemote()}
-              >
-                {intl.formatMessage({ id: "staleConfig.pullRemote" })}
-              </button>
-              <button
-                className="btn secondary"
-                onClick={() => void handleOverwriteAnyway()}
-              >
-                {intl.formatMessage({ id: "staleConfig.overwriteAnyway" })}
-              </button>
-              <button
-                className="btn ghost"
-                onClick={onCancel}
-              >
+              <AlertDialogCancel onClick={onCancel}>
                 {intl.formatMessage({ id: "restore.skipAction" })}
-              </button>
+              </AlertDialogCancel>
+              <Button variant="outline" onClick={() => void handleOverwriteAnyway()}>
+                {intl.formatMessage({ id: "staleConfig.overwriteAnyway" })}
+              </Button>
+              <AlertDialogAction onClick={() => void handlePullRemote()}>
+                {intl.formatMessage({ id: "staleConfig.pullRemote" })}
+              </AlertDialogAction>
             </>
           )}
-        </div>
-      </div>
-    </div>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

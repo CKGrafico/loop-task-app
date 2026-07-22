@@ -17,6 +17,7 @@ import { useBudgetWatch } from "./use-budget-watch";
 import { useLoopTransitions } from "./use-loop-transitions";
 import type { LoopTransition } from "./use-loop-transitions";
 import { PanelLeft, RotateCw, X, Star, BellOff, Bell } from "lucide-react";
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
 import { Sidebar } from "./components/Sidebar";
 import { AddVmWizard } from "./components/AddVmWizard";
 import { InstanceDetail } from "./components/InstanceDetail";
@@ -1955,56 +1956,54 @@ function AppInner(): React.ReactNode {
       {confirmRemoveId ? (() => {
         const env = environments.find((e) => e.id === confirmRemoveId);
         return (
-          <div className="modal-backdrop" onClick={() => setConfirmRemoveId(null)}>
-            <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 380 }}>
-              <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>
-                {intl.formatMessage({ id: "app.removeEnvironment" })}
-              </h2>
-              <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: "0 0 20px", lineHeight: 1.5 }}>
-                {intl.formatMessage({ id: "app.removeConfirm" }, { name: env?.name ?? confirmRemoveId })}
-              </p>
-              <div className="modal-actions">
-                <button className="btn" onClick={() => setConfirmRemoveId(null)}>
+          <AlertDialog open={!!confirmRemoveId} onOpenChange={(open) => { if (!open) setConfirmRemoveId(null); }}>
+            <AlertDialogContent style={{ width: 380 }}>
+              <AlertDialogHeader>
+                <AlertDialogTitle>{intl.formatMessage({ id: "app.removeEnvironment" })}</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {intl.formatMessage({ id: "app.removeConfirm" }, { name: env?.name ?? confirmRemoveId })}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setConfirmRemoveId(null)}>
                   {intl.formatMessage({ id: "app.removeCancel" })}
-                </button>
-                <button
-                  className="btn"
-                  style={{ background: "color-mix(in srgb, var(--danger) 18%, transparent)", color: "var(--danger)", borderColor: "color-mix(in srgb, var(--danger) 30%, transparent)" }}
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive/10 text-destructive border-destructive/30 hover:bg-destructive/20"
                   onClick={() => handleRemove(confirmRemoveId)}
                 >
                   {intl.formatMessage({ id: "app.removeConfirmBtn" })}
-                </button>
-              </div>
-            </div>
-          </div>
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         );
       })() : null}
 
       {confirmUnpersistId ? (() => {
         const session = sessions.find((s) => s.id === confirmUnpersistId);
         return (
-          <div className="modal-backdrop" onClick={() => setConfirmUnpersistId(null)}>
-            <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 380 }}>
-              <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>
-                {intl.formatMessage({ id: "session.unpersistTitle" })}
-              </h2>
-              <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: "0 0 20px", lineHeight: 1.5 }}>
-                {intl.formatMessage({ id: "session.unpersistConfirm" }, { title: session?.title ?? "" })}
-              </p>
-              <div className="modal-actions">
-                <button className="btn" onClick={() => setConfirmUnpersistId(null)}>
+          <AlertDialog open={!!confirmUnpersistId} onOpenChange={(open) => { if (!open) setConfirmUnpersistId(null); }}>
+            <AlertDialogContent style={{ width: 380 }}>
+              <AlertDialogHeader>
+                <AlertDialogTitle>{intl.formatMessage({ id: "session.unpersistTitle" })}</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {intl.formatMessage({ id: "session.unpersistConfirm" }, { title: session?.title ?? "" })}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setConfirmUnpersistId(null)}>
                   {intl.formatMessage({ id: "session.unpersistCancel" })}
-                </button>
-                <button
-                  className="btn"
-                  style={{ background: "color-mix(in srgb, var(--warning) 18%, transparent)", color: "var(--warning)", borderColor: "color-mix(in srgb, var(--warning) 30%, transparent)" }}
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-yellow-500/10 text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/20"
                   onClick={() => handleUnpersistSession(confirmUnpersistId)}
                 >
                   {intl.formatMessage({ id: "session.unpersistConfirmBtn" })}
-                </button>
-              </div>
-            </div>
-          </div>
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         );
       })() : null}
 

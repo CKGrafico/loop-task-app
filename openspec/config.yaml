@@ -6,9 +6,9 @@ context: |
   logs). Read-only in v1.
 
   Tech stack: TypeScript (strict), React 19, Electron 37, electron-vite 4,
-  Vite 7. Plain CSS design tokens today (src/renderer/src/theme.css); team is
-  adopting Tailwind + shadcn, Feature-Sliced Design, inversify DI, and next-intl
-  i18n. No CSS framework or state library currently.
+  Vite 7. Tailwind CSS v4 + shadcn/ui (new-york style) as the primary
+  component library, Feature-Sliced Design, inversify DI, and react-intl
+  i18n.
 
   Build system: pnpm (Node >= 20), pnpm-lock.yaml. Scripts: dev, dev:web,
   build, start, typecheck. No CI and no test suite yet — `pnpm typecheck` is the

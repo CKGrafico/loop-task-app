@@ -7,6 +7,7 @@ import { GitPullRequest, X, ExternalLink, CheckCircle2, MessageCircleWarning, Lo
 import { ReviewQueueStrip } from "./ReviewQueueStrip";
 import { ReviewDiffView } from "./ReviewDiffView";
 import { ReviewBriefingView } from "./ReviewBriefingView";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 /** Color class for PR risk level chip (shared with InboxView) */
 function riskChipClass(riskLevel: PrRiskLevel): string {
@@ -140,7 +141,10 @@ function ReviewModeContent({
   }, [batchItems, reviewModeService]);
 
   return (
-    <div className="review-mode-overlay" role="dialog" aria-label={intl.formatMessage({ id: "reviewMode.dialogLabel" })}>
+    <Dialog open={true} onOpenChange={() => handleExit()}>
+      <DialogTitle className="sr-only">{intl.formatMessage({ id: "reviewMode.dialogLabel" })}</DialogTitle>
+      <DialogDescription className="sr-only">{intl.formatMessage({ id: "reviewMode.dialogLabel" })}</DialogDescription>
+      <DialogContent className="fixed inset-0 max-w-none h-full w-full rounded-none border-0 p-0">
       <div className="review-mode-container">
         {/* Header */}
         <div className="review-mode-header">
@@ -327,6 +331,7 @@ function ReviewModeContent({
           </div>
         </div>
       </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

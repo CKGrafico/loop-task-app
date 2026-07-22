@@ -2,9 +2,12 @@ import { useState } from "react";
 import { useIntl } from "react-intl";
 import type { BudgetWatch, BudgetBreach } from "../../../shared/ipc";
 import type { Environment, LoopMeta } from "../types";
-import { X, Clock, Play, Trash2, Plus } from "lucide-react";
+import { Clock, Play, Trash2, Plus } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
 
 interface BudgetWatchPanelProps {
+  open?: boolean;
   watches: BudgetWatch[];
   breaches: BudgetBreach[];
   environments: Environment[];
@@ -36,17 +39,15 @@ export function BudgetWatchPanel(props: BudgetWatchPanelProps): React.ReactNode 
   const activeBreaches = breaches.filter((b) => !b.dismissed);
 
   return (
-    <div className="budget-panel-backdrop" onClick={onClose}>
-      <div className="budget-panel" onClick={(e) => e.stopPropagation()}>
-        <div className="budget-panel-header">
-          <span className="budget-panel-title">
-            <Clock size={14} />
+    <Sheet open={props.open ?? true} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
+      <SheetContent side="right">
+        <SheetHeader>
+          <SheetTitle>
+            <Clock size={14} className="inline mr-2" />
             {intl.formatMessage({ id: "budget.title" })}
-          </span>
-          <button className="icon-btn" onClick={onClose}>
-            <X size={14} />
-          </button>
-        </div>
+          </SheetTitle>
+          <SheetDescription>{intl.formatMessage({ id: "budget.title" })}</SheetDescription>
+        </SheetHeader>
 
         <p className="budget-panel-description">
           {intl.formatMessage({ id: "budget.description" })}
@@ -159,8 +160,8 @@ export function BudgetWatchPanel(props: BudgetWatchPanelProps): React.ReactNode 
             onCancel={() => setShowForm(false)}
           />
         ) : null}
-      </div>
-    </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -294,12 +295,12 @@ function AddWatchForm(props: {
       {error ? <div className="budget-form-error">{error}</div> : null}
 
       <div className="budget-form-actions">
-        <button className="btn" onClick={onCancel}>
+        <Button variant="outline" onClick={onCancel}>
           {intl.formatMessage({ id: "vmWizard.cancel" })}
-        </button>
-        <button className="btn primary" onClick={handleSubmit}>
+        </Button>
+        <Button onClick={handleSubmit}>
           {intl.formatMessage({ id: "budget.addWatch" })}
-        </button>
+        </Button>
       </div>
     </div>
   );

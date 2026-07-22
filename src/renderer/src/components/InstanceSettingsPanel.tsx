@@ -1,8 +1,10 @@
 import { useState, useCallback } from "react";
 import { useIntl } from "react-intl";
 import type { AgentRuntime, Environment, EndpointKind, AccessEndpoint } from "../../../shared/ipc";
-import { Settings, Trash2, Plus, X, Check, Globe, Terminal } from "lucide-react";
+import { Settings, Trash2, Plus, Check, Globe, Terminal } from "lucide-react";
 import { translateMessage } from "../i18n";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
 
 interface InstanceSettingsPanelProps {
   open: boolean;
@@ -141,17 +143,15 @@ export function InstanceSettingsPanel({
   };
 
   return (
-    <div className="settings-backdrop" onClick={onClose}>
-      <div className="settings-drawer" onClick={(e) => e.stopPropagation()}>
-        <div className="settings-header">
-          <h2>{intl.formatMessage({ id: "instanceSettings.title" })}</h2>
-          <button className="btn primary" onClick={handleSaveAndClose}>
-            {intl.formatMessage({ id: "instanceSettings.saveAndClose" })}
-          </button>
-          <button className="icon-btn" onClick={() => { syncName(); onClose(); }} title={intl.formatMessage({ id: "settings.close" })}>
-            <X size={16} />
-          </button>
-        </div>
+    <Sheet open={open} onOpenChange={(isOpen) => { if (!isOpen) { syncName(); onClose(); } }}>
+      <SheetContent side="right">
+        <SheetHeader>
+          <SheetTitle>{intl.formatMessage({ id: "instanceSettings.title" })}</SheetTitle>
+          <SheetDescription>{intl.formatMessage({ id: "settings.close" })}</SheetDescription>
+        </SheetHeader>
+        <Button className="mb-4" onClick={handleSaveAndClose}>
+          {intl.formatMessage({ id: "instanceSettings.saveAndClose" })}
+        </Button>
 
         <div className="settings-body">
           {/* Instance name */}
@@ -382,7 +382,7 @@ export function InstanceSettingsPanel({
             </button>
           )}
         </div>
-      </div>
-    </div>
+      </SheetContent>
+    </Sheet>
   );
 }

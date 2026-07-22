@@ -514,7 +514,7 @@ keys, writes them into electron-store, and clears the keys. The renderer's
 | Vite 7 | Bundler/dev server | Renderer builds + browser-only preview |
 | React 19 | UI framework | Component-based renderer |
 | TypeScript 5.8 (strict) | Language | Type-safe IPC contract across process boundaries |
-| Plain CSS + custom properties | Styling | Design tokens in `theme.css`; no CSS framework |
+| Tailwind CSS v4 + shadcn/ui | Styling | Utility-first CSS + accessible component primitives on top of Orbion design-token CSS variables |
 | Server-Sent Events (SSE) | Log streaming | Push-based live log following |
 | rehype-sanitize 6 | HTML sanitization | Strips dangerous HTML (script, iframe, event handlers) from all markdown rendered via react-markdown; defense-in-depth against XSS in the Electron renderer |
 | react-markdown 10 | Chat markdown rendering | Renders assistant messages with code highlighting + HTML sanitization |
