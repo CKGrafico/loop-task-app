@@ -2,6 +2,15 @@ import { useState } from "react";
 import { useIntl } from "react-intl";
 import { translateMessage } from "../i18n";
 import type { RestoreAvailability, PullRestoreResult } from "../../../shared/ipc";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 /**
  * Restore-offer dialog: shown when a config-home VM has a config file
@@ -11,10 +20,14 @@ export function RestoreOffer({
   availability,
   onRestore,
   onSkip,
+  open = true,
+  onOpenChange,
 }: {
   availability: RestoreAvailability & { available: true };
   onRestore: () => Promise<PullRestoreResult>;
   onSkip: () => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }): React.ReactNode {
   const intl = useIntl();
   const [restoring, setRestoring] = useState(false);
@@ -28,44 +41,43 @@ export function RestoreOffer({
       setRestoring(false);
       setError(translateMessage(intl, result.error) ?? intl.formatMessage({ id: "restore.restoreFailed" }, { error: "Unknown error" }));
     }
-    // On success, the parent component will handle state changes
   }
 
   return (
-    <div className="modal-backdrop">
-      <div className="modal restore-offer-modal">
-        <h2 className="modal-title">
-          {intl.formatMessage({ id: "restore.availableTitle" })}
-        </h2>
-        <p className="modal-body">
-          {intl.formatMessage(
-            { id: "restore.availableCopy" },
-            {
-              count: availability.environmentCount,
-              names: availability.environmentNames.join(", "),
-            },
-          )}
-        </p>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{intl.formatMessage({ id: "restore.availableTitle" })}</DialogTitle>
+          <DialogDescription>
+            {intl.formatMessage(
+              { id: "restore.availableCopy" },
+              {
+                count: availability.environmentCount,
+                names: availability.environmentNames.join(", "),
+              },
+            )}
+          </DialogDescription>
+        </DialogHeader>
         {error && (
           <p className="restore-offer-error">{error}</p>
         )}
-        <div className="modal-actions">
+        <DialogFooter>
           {restoring ? (
             <span className="restore-offer-progress">
               {intl.formatMessage({ id: "restore.restoringTitle" })}
             </span>
           ) : (
             <>
-              <button className="btn primary" onClick={() => void handleRestore()}>
+              <Button onClick={() => void handleRestore()}>
                 {intl.formatMessage({ id: "restore.restoreAction" })}
-              </button>
-              <button className="btn secondary" onClick={onSkip}>
+              </Button>
+              <Button variant="outline" onClick={onSkip}>
                 {intl.formatMessage({ id: "restore.skipAction" })}
-              </button>
+              </Button>
             </>
           )}
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
