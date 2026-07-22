@@ -1,5 +1,7 @@
 import { defineConfig } from "electron-vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+import path from "node:path";
 
 export default defineConfig({
   main: {
@@ -27,7 +29,12 @@ export default defineConfig({
     },
   },
   renderer: {
-    plugins: [react()],
+    resolve: {
+      alias: {
+        "@": path.resolve(__dirname, "src/renderer/src"),
+      },
+    },
+    plugins: [react(), tailwindcss()],
     build: {
       rollupOptions: {
         output: {
@@ -36,6 +43,12 @@ export default defineConfig({
             "markdown": ["react-markdown", "rehype-highlight"],
             "react-vendor": ["react", "react-dom"],
             "intl": ["react-intl"],
+            "radix-ui": [
+              /@radix-ui\/react-/,
+              "class-variance-authority",
+              "clsx",
+              "tailwind-merge",
+            ],
           },
         },
       },

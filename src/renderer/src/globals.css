@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+/*
+ * Orbion design tokens mapped to shadcn/ui CSS variables.
+ * The dark navy/lime palette is the default — not an override.
+ * shadcn components read these variables at render time.
+ */
+
+@theme inline {
+  /* shadcn semantic tokens — Orbion dark theme */
+  --color-background: var(--bg-panel);
+  --color-foreground: var(--text-primary);
+  --color-card: var(--bg-elevated);
+  --color-card-foreground: var(--text-primary);
+  --color-popover: var(--bg-elevated);
+  --color-popover-foreground: var(--text-primary);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--accent-ink);
+  --color-secondary: var(--bg-input);
+  --color-secondary-foreground: var(--text-secondary);
+  --color-muted: var(--bg-hover);
+  --color-muted-foreground: var(--text-muted);
+  --color-accent: var(--accent-hover);
+  --color-accent-foreground: var(--accent-ink);
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: var(--text-primary);
+  --color-border: var(--border);
+  --color-input: var(--bg-input);
+  --color-ring: var(--border-subtle);
+
+  /* Sidebar-specific */
+  --color-sidebar-background: var(--bg-sidebar);
+  --color-sidebar-foreground: var(--text-secondary);
+  --color-sidebar-primary: var(--accent);
+  --color-sidebar-primary-foreground: var(--accent-ink);
+  --color-sidebar-accent: var(--bg-hover);
+  --color-sidebar-accent-foreground: var(--text-primary);
+  --color-sidebar-border: var(--border-subtle);
+  --color-sidebar-ring: var(--border-subtle);
+
+  /* Chart colors (mapped to Orbion status palette) */
+  --color-chart-1: var(--status-running);
+  --color-chart-2: var(--status-waiting);
+  --color-chart-3: var(--accent-task);
+  --color-chart-4: var(--status-paused);
+  --color-chart-5: var(--status-failed);
+
+  /* Radii — Orbion scale */
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+}

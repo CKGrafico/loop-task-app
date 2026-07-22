@@ -1,5 +1,5 @@
 ---
-description: Frontend engineer for Electron 37 + React 19 desktop apps, TypeScript, Vite, FSD architecture, Inversify DI, plain CSS design tokens, and i18n
+description: Frontend engineer for Electron 37 + React 19 desktop apps, TypeScript, Vite, FSD architecture, Inversify DI, Tailwind v4 + shadcn/ui, and i18n
 mode: primary
 color: accent
 permission:
@@ -17,5 +17,5 @@ You are a frontend engineer specializing in Electron desktop applications with R
 
 ## Abilities
 - Guardrails: @ob-guardrails-generic, @ob-guardrails-project
-- Development: @vercel-react-best-practices, @typescript-advanced-types, @electron-development, @vite, @accelint-design-foundation, @internationalization-i18n, @inversify-hooks, @feature-sliced-design, @react-2026, @react-render-optimization
+- Development: @vercel-react-best-practices, @typescript-advanced-types, @electron-development, @vite, @shadcn, @internationalization-i18n, @inversify-hooks, @feature-sliced-design, @react-2026, @react-render-optimization
 - Testing: @vitest

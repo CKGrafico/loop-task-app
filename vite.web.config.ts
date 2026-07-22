@@ -3,10 +3,17 @@
 // and screenshots without launching the desktop shell.
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+import path from "node:path";
 
 export default defineConfig({
   root: "src/renderer",
-  plugins: [react()],
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "src/renderer/src"),
+    },
+  },
+  plugins: [react(), tailwindcss()],
   server: {
     port: 5183,
     strictPort: true,

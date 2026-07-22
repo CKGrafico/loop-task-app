@@ -5,6 +5,7 @@ import { IntlProvider } from "react-intl";
 import { App } from "./App";
 import { DIProvider } from "./services/DIProvider";
 import { defaultLocale, messages } from "./i18n";
+import "./globals.css";
 import "./theme.css";
 
 const container = document.getElementById("root");
