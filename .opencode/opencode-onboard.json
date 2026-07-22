@@ -1,7 +1,7 @@
 {
   "version": 2,
-  "generatedAt": "2026-07-20T23:04:28.523Z",
-  "onboardVersion": "1.4.2",
+  "generatedAt": "2026-07-22T11:44:49.793Z",
+  "onboardVersion": "1.4.4",
   "opencodeVersion": "1.17.14",
   "platform": {
     "backlog": "github",

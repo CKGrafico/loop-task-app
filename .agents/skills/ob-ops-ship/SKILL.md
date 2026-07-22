@@ -12,7 +12,7 @@ The caller provides (all optional):
 - PR title and body. When absent, derive them from the change context (change id, tasks completed, commit list).
 - The base branch. When absent, resolve the default branch as shown in the platform steps below.
 
-Repo platform is set in `.opencode/opencode-onboard.json` → `platform.repo`. The platform-specific content below is injected by the CLI during onboarding.
+Repo platform is set in `.opencode/opencode-onboard.json` `platform.repo`. The platform-specific content below is injected by the CLI during onboarding.
 
 <!-- OB-PLATFORM-SHIP-START -->
 **ALL GitHub data MUST come from `gh` CLI. NEVER use webfetch, HTTP requests, or browser MCP tools for GitHub operations, even if gh CLI fails. If `gh` is unavailable, report as a blocker.**
