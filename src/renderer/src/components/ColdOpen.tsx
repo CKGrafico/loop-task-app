@@ -3,6 +3,8 @@ import { useIntl } from "react-intl";
 import { OrbionMark } from "./OrbionMark";
 import { decodeBootstrapSeed } from "../../../shared/utils";
 import type { BootstrapSeed } from "../../../shared/ipc";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 /**
  * Cold-open empty state: shown when no instances/environments are configured.
@@ -51,19 +53,19 @@ export function ColdOpen({
         {intl.formatMessage({ id: "coldOpen.copy" })}
       </p>
       <div className="cold-open-actions">
-        <button className="btn primary cold-open-btn" onClick={onAddVm}>
+        <Button className="cold-open-btn" onClick={onAddVm}>
           {intl.formatMessage({ id: "coldOpen.addFirstMachine" })}
-        </button>
-        <button className="btn secondary cold-open-btn" onClick={handleImportClick}>
+        </Button>
+        <Button variant="outline" className="cold-open-btn" onClick={handleImportClick}>
           {intl.formatMessage({ id: "coldOpen.importSeed" })}
-        </button>
+        </Button>
       </div>
       {showSeedInput && (
         <div className="cold-open-seed-dialog">
           <h3 className="cold-open-seed-title">
             {intl.formatMessage({ id: "coldOpen.importSeedTitle" })}
           </h3>
-          <input
+          <Input
             className="cold-open-seed-input"
             type="text"
             placeholder={intl.formatMessage({ id: "coldOpen.importSeedPlaceholder" })}
@@ -84,12 +86,12 @@ export function ColdOpen({
             </p>
           )}
           <div className="cold-open-seed-actions">
-            <button className="btn primary" onClick={handleSeedConfirm}>
+            <Button onClick={handleSeedConfirm}>
               {intl.formatMessage({ id: "coldOpen.importSeedConfirm" })}
-            </button>
-            <button className="btn secondary" onClick={handleSeedCancel}>
+            </Button>
+            <Button variant="outline" onClick={handleSeedCancel}>
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       )}

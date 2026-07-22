@@ -4,6 +4,7 @@ import type { BudgetWatch, BudgetBreach } from "../../../shared/ipc";
 import type { Environment, LoopMeta } from "../types";
 import { Clock, Play, Trash2, Plus } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
 
 interface BudgetWatchPanelProps {
   open?: boolean;
@@ -294,12 +295,12 @@ function AddWatchForm(props: {
       {error ? <div className="budget-form-error">{error}</div> : null}
 
       <div className="budget-form-actions">
-        <button className="btn" onClick={onCancel}>
+        <Button variant="outline" onClick={onCancel}>
           {intl.formatMessage({ id: "vmWizard.cancel" })}
-        </button>
-        <button className="btn primary" onClick={handleSubmit}>
+        </Button>
+        <Button onClick={handleSubmit}>
           {intl.formatMessage({ id: "budget.addWatch" })}
-        </button>
+        </Button>
       </div>
     </div>
   );
